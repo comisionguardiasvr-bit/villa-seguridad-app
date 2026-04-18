@@ -22,7 +22,6 @@ if not st.session_state.autenticado:
     st.markdown("<h1 style='text-align: center;'>🛡️ Tesorería Villa</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: gray;'>Sistema de control de accesos y pagos</p>", unsafe_allow_html=True)
     
-    # En móviles esto se apila solo
     _, col_login, _ = st.columns([1, 2, 1])
     with col_login:
         with st.form("login_form"):
@@ -40,7 +39,6 @@ if not st.session_state.autenticado:
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def cargar_datos_nube():
-    # Usamos ttl=0 para leer en vivo siempre
     try:
         df_p = conn.read(worksheet="Pagos", ttl=0).dropna(how="all")
         df_p['numero'] = pd.to_numeric(df_p['numero']).astype(int)
@@ -83,7 +81,6 @@ with st.sidebar:
         st.rerun()
 
 # --- FILTROS SEGUROS DE MES ---
-# Se asegura de que no falle si la hoja está vacía
 if not df_pagos_full.empty and 'mes' in df_pagos_full.columns:
     df_pagos_mes = df_pagos_full[df_pagos_full['mes'].astype(str).str.lower() == mes_actual.lower()].reset_index(drop=True)
 else:
@@ -101,7 +98,44 @@ recaudado_actual = pd.to_numeric(df_pagos_mes['monto_pagado']).sum() if not df_p
 balance_total = recaudado_actual - (COSTO_TOTAL_GUARDIAS + TOTAL_OTROS_GASTOS)
 deudores_count = len(df_casas) - len(df_pagos_mes)
 
-# --- GENERADOR DE PDF ---
+# --- GENERADORES DE PDF ---
+def generar_boleta_pdf(calle, numero, propietario, monto, fecha, mes_texto):
+    # Formato A5 (mitad de hoja) ideal para boletas pequeñas
+    pdf = FPDF(format='A5') 
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 8, txt="COMPROBANTE DE PAGO - SEGURIDAD", ln=True, align='C')
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 6, txt="VILLA PASAJES PIRKUN, TRIWE Y PRIMAVERA", ln=True, align='C')
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", 'B', 11)
+    pdf.cell(40, 8, txt="Fecha de Pago:", border=0)
+    pdf.set_font("Arial", '', 11)
+    pdf.cell(0, 8, txt=str(fecha), border=0, ln=True)
+    
+    pdf.set_font("Arial", 'B', 11)
+    pdf.cell(40, 8, txt="Mes Cancelado:", border=0)
+    pdf.set_font("Arial", '', 11)
+    pdf.cell(0, 8, txt=str(mes_texto).upper(), border=0, ln=True)
+    
+    pdf.set_font("Arial", 'B', 11)
+    pdf.cell(40, 8, txt="Recibido de:", border=0)
+    pdf.set_font("Arial", '', 11)
+    pdf.cell(0, 8, txt=f"{propietario} (Calle {calle} #{numero})", border=0, ln=True)
+    
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(40, 10, txt="Monto Pagado:", border=0)
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, txt=f"$ {monto:,.0f}", border=0, ln=True)
+    
+    pdf.ln(15)
+    pdf.set_font("Arial", 'I', 9)
+    pdf.cell(0, 5, txt="Documento emitido digitalmente. Válido como comprobante de tesorería.", ln=True, align='C')
+    
+    return pdf.output(dest='S').encode('latin-1', 'replace')
+
 def generar_pdf_cierre(recaudado, costo_guardias, costo_otros, balance, df_guardias_lista, df_gastos, mes_texto):
     pdf = FPDF()
     pdf.add_page()
@@ -159,14 +193,12 @@ def generar_pdf_cierre(recaudado, costo_guardias, costo_otros, balance, df_guard
 # --- INTERFAZ PRINCIPAL ---
 st.title(f"📊 Dashboard - {mes_actual}")
 
-# Pestañas adaptadas
 tab1, tab2, tab3, tab4 = st.tabs(["📝 Pagos", "🛒 Gastos", "📑 Cierre", "👮‍♂️ Personal"])
 
 # ==========================================
 # PESTAÑA 1: PAGOS
 # ==========================================
 with tab1:
-    # Cuadrícula 2x2 para móviles
     col_m1, col_m2 = st.columns(2)
     col_m3, col_m4 = st.columns(2)
     col_m1.metric("Meta Mensual", f"${len(df_casas)*CUOTA_MENSUAL:,.0f}")
@@ -177,7 +209,6 @@ with tab1:
     st.markdown("---")
     st.subheader("💵 Registrar Nuevo Pago")
     
-    # Formulario apilable para móviles
     with st.container():
         calle_sel = st.selectbox("1. Seleccione Calle / Pasaje", df_casas['calle'].unique())
         
@@ -213,18 +244,39 @@ with tab1:
         if not df_pagos_mes.empty:
             st.dataframe(df_pagos_mes[['calle', 'numero', 'propietario', 'fecha']], use_container_width=True, hide_index=True)
             
-            # Botón peligroso oculto en un acordeón
-            with st.expander("⚙️ Opciones Avanzadas (Anular un pago)"):
-                with st.form("anular"):
-                    st.warning("⚠️ Esta acción borrará el registro de la nube.")
-                    target = st.selectbox("Seleccione pago a eliminar:", [f"{r['calle']} #{r['numero']} - {r['propietario']}" for i, r in df_pagos_mes.iterrows()])
-                    if st.form_submit_button("Confirmar Anulación", use_container_width=True):
-                        c, n = target.split(" #")[0], int(target.split(" #")[1].split(" - ")[0])
-                        df_actualizado = df_pagos_full[~((df_pagos_full['calle'] == c) & (df_pagos_full['numero'] == n) & (df_pagos_full['mes'].astype(str).str.lower() == mes_actual.lower()))]
-                        conn.update(worksheet="Pagos", data=df_actualizado)
-                        st.cache_data.clear()
-                        st.toast("🗑️ Pago anulado correctamente.", icon="✅")
-                        st.rerun()
+            # --- NUEVA SECCIÓN: EMITIR BOLETA ---
+            st.markdown("##### 🧾 Comprobantes y Anulaciones")
+            c_bol, c_anular = st.columns(2)
+            
+            with c_bol:
+                with st.expander("📄 Descargar Comprobante"):
+                    pago_sel = st.selectbox("Seleccione el vecino:", [f"{r['calle']} #{r['numero']} - {r['propietario']}" for i, r in df_pagos_mes.iterrows()])
+                    if pago_sel:
+                        c, n = pago_sel.split(" #")[0], int(pago_sel.split(" #")[1].split(" - ")[0])
+                        datos_pago = df_pagos_mes[(df_pagos_mes['calle'] == c) & (df_pagos_mes['numero'] == n)].iloc[0]
+                        
+                        pdf_boleta = generar_boleta_pdf(c, n, datos_pago['propietario'], datos_pago['monto_pagado'], datos_pago['fecha'], mes_actual)
+                        
+                        st.download_button(
+                            label="📥 Descargar Boleta (PDF)",
+                            data=pdf_boleta,
+                            file_name=f"Comprobante_{c}_{n}_{mes_actual.replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            type="primary",
+                            use_container_width=True
+                        )
+            
+            with c_anular:
+                with st.expander("⚙️ Anular un pago (Borrar)"):
+                    with st.form("anular"):
+                        target = st.selectbox("Seleccione pago a eliminar:", [f"{r['calle']} #{r['numero']} - {r['propietario']}" for i, r in df_pagos_mes.iterrows()])
+                        if st.form_submit_button("Confirmar Anulación", use_container_width=True):
+                            c, n = target.split(" #")[0], int(target.split(" #")[1].split(" - ")[0])
+                            df_actualizado = df_pagos_full[~((df_pagos_full['calle'] == c) & (df_pagos_full['numero'] == n) & (df_pagos_full['mes'].astype(str).str.lower() == mes_actual.lower()))]
+                            conn.update(worksheet="Pagos", data=df_actualizado)
+                            st.cache_data.clear()
+                            st.toast("🗑️ Pago anulado correctamente.", icon="✅")
+                            st.rerun()
         else:
             st.info("Aún no hay pagos registrados en este mes.")
 
@@ -251,7 +303,6 @@ with tab2:
     st.markdown("---")
     st.subheader("🧾 Historial de Compras")
     if not df_gastos_mes.empty:
-        # Formatear la vista del dataframe para que se vea como dinero
         st.dataframe(df_gastos_mes[['descripcion', 'monto', 'fecha']], use_container_width=True, hide_index=True)
         
         with st.expander("⚙️ Anular un Gasto"):
