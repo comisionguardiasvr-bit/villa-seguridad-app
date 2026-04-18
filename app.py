@@ -100,7 +100,6 @@ deudores_count = len(df_casas) - len(df_pagos_mes)
 
 # --- GENERADORES DE PDF ---
 def generar_boleta_pdf(calle, numero, propietario, monto, fecha, mes_texto):
-    # Formato A5 (mitad de hoja) ideal para boletas pequeñas
     pdf = FPDF(format='A5') 
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
@@ -187,7 +186,7 @@ def generar_pdf_cierre(recaudado, costo_guardias, costo_otros, balance, df_guard
             pdf.cell(60, 8, txt=f"$ {int(row['monto']):,.0f}", border=1, ln=True, align='R')
     pdf.ln(15)
     pdf.set_font("Arial", 'I', 8)
-    pdf.cell(0, 5, txt="Documento generado automaticamente por el sistema Cloud.", ln=True, align='C')
+    pdf.cell(0, 5, txt="Documento generado automáticamente por el sistema Cloud.", ln=True, align='C')
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
 # --- INTERFAZ PRINCIPAL ---
@@ -244,7 +243,6 @@ with tab1:
         if not df_pagos_mes.empty:
             st.dataframe(df_pagos_mes[['calle', 'numero', 'propietario', 'fecha']], use_container_width=True, hide_index=True)
             
-            # --- NUEVA SECCIÓN: EMITIR BOLETA ---
             st.markdown("##### 🧾 Comprobantes y Anulaciones")
             c_bol, c_anular = st.columns(2)
             
@@ -268,7 +266,7 @@ with tab1:
             
             with c_anular:
                 with st.expander("⚙️ Anular un pago (Borrar)"):
-                    with st.form("anular"):
+                    with st.form("anular_pago"):
                         target = st.selectbox("Seleccione pago a eliminar:", [f"{r['calle']} #{r['numero']} - {r['propietario']}" for i, r in df_pagos_mes.iterrows()])
                         if st.form_submit_button("Confirmar Anulación", use_container_width=True):
                             c, n = target.split(" #")[0], int(target.split(" #")[1].split(" - ")[0])
@@ -310,7 +308,12 @@ with tab2:
                 target_g = st.selectbox("Seleccione gasto:", [f"{r['descripcion']} - ${r['monto']}" for i, r in df_gastos_mes.iterrows()])
                 if st.form_submit_button("Eliminar Gasto", use_container_width=True):
                     desc_del, monto_del = target_g.split(" - $")
-                    df_actualizado = df_gastos_full[~((df_gastos_full['descripcion'] == desc_del) & (df_gastos_full['monto'] == int(monto_del)) & (df_gastos_full['mes'].astype(str).str.lower() == mes_actual.lower()))]
+                    
+                    # Fix de los decimales de Google Sheets
+                    monto_a_borrar = float(monto_del)
+                    df_gastos_full['monto'] = pd.to_numeric(df_gastos_full['monto'])
+                    
+                    df_actualizado = df_gastos_full[~((df_gastos_full['descripcion'] == desc_del) & (df_gastos_full['monto'] == monto_a_borrar) & (df_gastos_full['mes'].astype(str).str.lower() == mes_actual.lower()))]
                     conn.update(worksheet="Gastos", data=df_actualizado)
                     st.cache_data.clear()
                     st.toast("🗑️ Gasto eliminado.", icon="✅")
