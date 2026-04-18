@@ -8,24 +8,26 @@ from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIGURACIÓN DE PARÁMETROS ---
-st.set_page_config(page_title="Gestión de Seguridad Villa", layout="wide")
+st.set_page_config(page_title="Seguridad Villa", page_icon="🛡️", layout="wide")
 
 CUOTA_MENSUAL = 10000 
 PASSWORD_ACCESO = "villa2026"
 
-# --- SISTEMA DE LOGIN ---
+# --- SISTEMA DE LOGIN (Optimizado para móvil) ---
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
-    st.markdown("<h1 style='text-align: center;'>🔒 Acceso Restringido</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Ingrese sus credenciales de administración para continuar.</p>", unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🛡️ Tesorería Villa</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: gray;'>Sistema de control de accesos y pagos</p>", unsafe_allow_html=True)
     
-    col_espacio1, col_login, col_espacio2 = st.columns([1, 1, 1])
+    # En móviles esto se apila solo
+    _, col_login, _ = st.columns([1, 2, 1])
     with col_login:
         with st.form("login_form"):
-            pass_input = st.text_input("Contraseña de Tesorería", type="password")
-            submit_login = st.form_submit_button("Ingresar al Sistema", use_container_width=True)
+            pass_input = st.text_input("Contraseña de acceso", type="password", placeholder="Ingrese su clave...")
+            submit_login = st.form_submit_button("Ingresar", use_container_width=True)
             if submit_login:
                 if pass_input == PASSWORD_ACCESO:
                     st.session_state.autenticado = True
@@ -37,24 +39,21 @@ if not st.session_state.autenticado:
 # --- CONEXIÓN A GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=5) # Refresca los datos cada 5 segundos
 def cargar_datos_nube():
-    # Leer Pagos
+    # Usamos ttl=0 para leer en vivo siempre
     try:
-        df_p = conn.read(worksheet="Pagos").dropna(how="all")
+        df_p = conn.read(worksheet="Pagos", ttl=0).dropna(how="all")
         df_p['numero'] = pd.to_numeric(df_p['numero']).astype(int)
     except:
         df_p = pd.DataFrame(columns=['calle', 'numero', 'propietario', 'monto_pagado', 'fecha', 'mes'])
         
-    # Leer Gastos
     try:
-        df_g = conn.read(worksheet="Gastos").dropna(how="all")
+        df_g = conn.read(worksheet="Gastos", ttl=0).dropna(how="all")
     except:
         df_g = pd.DataFrame(columns=['descripcion', 'monto', 'fecha', 'mes'])
         
-    # Leer Guardias
     try:
-        df_gu = conn.read(worksheet="Guardias").dropna(how="all")
+        df_gu = conn.read(worksheet="Guardias", ttl=0).dropna(how="all")
     except:
         df_gu = pd.DataFrame(columns=['nombre', 'tipo', 'sueldo'])
         
@@ -73,18 +72,27 @@ def cargar_casas():
 
 df_casas = cargar_casas()
 
-# --- SELECTOR DE MES ---
-st.sidebar.title("⚙️ Administración en la Nube")
-meses_disponibles = ["Abril 2026", "Mayo 2026", "Junio 2026", "Julio 2026", "Agosto 2026", "Septiembre 2026", "Octubre 2026", "Noviembre 2026", "Diciembre 2026"]
-mes_actual = st.sidebar.selectbox("📅 Mes de Trabajo", meses_disponibles)
+# --- BARRA LATERAL (Menú) ---
+with st.sidebar:
+    st.title("⚙️ Menú Principal")
+    meses_disponibles = ["Abril 2026", "Mayo 2026", "Junio 2026", "Julio 2026", "Agosto 2026", "Septiembre 2026", "Octubre 2026", "Noviembre 2026", "Diciembre 2026"]
+    mes_actual = st.selectbox("📅 Seleccione el Mes", meses_disponibles)
+    st.markdown("---")
+    if st.button("🚪 Cerrar Sesión", use_container_width=True):
+        st.session_state.autenticado = False
+        st.rerun()
 
-if st.sidebar.button("Cerrar Sesión"):
-    st.session_state.autenticado = False
-    st.rerun()
+# --- FILTROS SEGUROS DE MES ---
+# Se asegura de que no falle si la hoja está vacía
+if not df_pagos_full.empty and 'mes' in df_pagos_full.columns:
+    df_pagos_mes = df_pagos_full[df_pagos_full['mes'].astype(str).str.lower() == mes_actual.lower()].reset_index(drop=True)
+else:
+    df_pagos_mes = pd.DataFrame(columns=df_pagos_full.columns)
 
-# Filtrar datos por mes actual
-df_pagos_mes = df_pagos_full[df_pagos_full['mes'] == mes_actual].reset_index(drop=True)
-df_gastos_mes = df_gastos_full[df_gastos_full['mes'] == mes_actual].reset_index(drop=True)
+if not df_gastos_full.empty and 'mes' in df_gastos_full.columns:
+    df_gastos_mes = df_gastos_full[df_gastos_full['mes'].astype(str).str.lower() == mes_actual.lower()].reset_index(drop=True)
+else:
+    df_gastos_mes = pd.DataFrame(columns=df_gastos_full.columns)
 
 # --- CÁLCULOS GLOBALES ---
 COSTO_TOTAL_GUARDIAS = pd.to_numeric(df_guardias['sueldo']).sum() if not df_guardias.empty else 0
@@ -145,83 +153,133 @@ def generar_pdf_cierre(recaudado, costo_guardias, costo_otros, balance, df_guard
             pdf.cell(60, 8, txt=f"$ {int(row['monto']):,.0f}", border=1, ln=True, align='R')
     pdf.ln(15)
     pdf.set_font("Arial", 'I', 8)
-    pdf.cell(0, 5, txt="Documento generado automáticamente por el sistema Cloud.", ln=True, align='C')
+    pdf.cell(0, 5, txt="Documento generado automaticamente por el sistema Cloud.", ln=True, align='C')
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
-# --- INTERFAZ ---
-st.title(f"🛡️ Panel de Control - {mes_actual}")
-tab1, tab2, tab3, tab4 = st.tabs(["📝 Pagos Diarios", "🛒 Otros Gastos", "📊 Cierre de Mes", "👮‍♂️ Personal"])
+# --- INTERFAZ PRINCIPAL ---
+st.title(f"📊 Dashboard - {mes_actual}")
 
+# Pestañas adaptadas
+tab1, tab2, tab3, tab4 = st.tabs(["📝 Pagos", "🛒 Gastos", "📑 Cierre", "👮‍♂️ Personal"])
+
+# ==========================================
+# PESTAÑA 1: PAGOS
+# ==========================================
 with tab1:
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Meta Mensual", f"${len(df_casas)*CUOTA_MENSUAL:,.0f}")
-    c2.metric("Recaudado", f"${recaudado_actual:,.0f}")
-    c3.metric("Saldo Actual", f"${balance_total:,.0f}", delta=f"{balance_total:,.0f}")
-    c4.metric("Casas Pendientes", f"{deudores_count}")
+    # Cuadrícula 2x2 para móviles
+    col_m1, col_m2 = st.columns(2)
+    col_m3, col_m4 = st.columns(2)
+    col_m1.metric("Meta Mensual", f"${len(df_casas)*CUOTA_MENSUAL:,.0f}")
+    col_m2.metric("Recaudado", f"${recaudado_actual:,.0f}")
+    col_m3.metric("Saldo Caja", f"${balance_total:,.0f}", delta=f"{balance_total:,.0f}")
+    col_m4.metric("Morosos", f"{deudores_count} casas")
 
     st.markdown("---")
-    st.subheader("Registrar Pago")
-    cola, colb = st.columns(2)
-    with cola:
-        calle_sel = st.selectbox("Calle / Pasaje", df_casas['calle'].unique())
-    with colb:
+    st.subheader("💵 Registrar Nuevo Pago")
+    
+    # Formulario apilable para móviles
+    with st.container():
+        calle_sel = st.selectbox("1. Seleccione Calle / Pasaje", df_casas['calle'].unique())
+        
         p_hechos = df_pagos_mes[df_pagos_mes['calle'] == calle_sel]['numero'].tolist()
         pendientes = df_casas[(df_casas['calle'] == calle_sel) & (~df_casas['numero'].isin(p_hechos))]
+        
         if pendientes.empty:
-            st.info("✨ Pasaje al día.")
+            st.success("✨ ¡Todas las casas de este pasaje están al día!")
             num_sel = None
         else:
-            dict_pend = {f"{r['numero']} - {r['propietario']}": r['numero'] for idx, r in pendientes.iterrows()}
-            num_sel = dict_pend[st.selectbox("N° Casa - Propietario", dict_pend.keys())]
+            dict_pend = {f"N° {r['numero']} - {r['propietario']}": r['numero'] for idx, r in pendientes.iterrows()}
+            num_sel = dict_pend[st.selectbox("2. Seleccione Casa Pendiente", dict_pend.keys())]
 
-    if st.button("Guardar Pago Nube", type="primary", disabled=(num_sel is None)):
-        nom = df_casas[(df_casas['calle'] == calle_sel) & (df_casas['numero'] == num_sel)]['propietario'].values[0]
-        nuevo = pd.DataFrame([{'calle': calle_sel, 'numero': int(num_sel), 'propietario': nom, 'monto_pagado': CUOTA_MENSUAL, 'fecha': datetime.now().strftime("%Y-%m-%d %H:%M"), 'mes': mes_actual}])
-        df_actualizado = pd.concat([df_pagos_full, nuevo], ignore_index=True)
-        conn.update(worksheet="Pagos", data=df_actualizado)
-        st.cache_data.clear()
-        st.success("✅ Guardado en Google Sheets")
-        st.rerun()
+        if st.button("💳 Guardar Pago", type="primary", use_container_width=True, disabled=(num_sel is None)):
+            nom = df_casas[(df_casas['calle'] == calle_sel) & (df_casas['numero'] == num_sel)]['propietario'].values[0]
+            nuevo = pd.DataFrame([{'calle': calle_sel, 'numero': int(num_sel), 'propietario': nom, 'monto_pagado': CUOTA_MENSUAL, 'fecha': datetime.now().strftime("%Y-%m-%d %H:%M"), 'mes': mes_actual}])
+            df_actualizado = pd.concat([df_pagos_full, nuevo], ignore_index=True)
+            conn.update(worksheet="Pagos", data=df_actualizado)
+            st.cache_data.clear()
+            st.toast(f"✅ Pago de {nom} guardado con éxito.", icon="☁️")
+            st.rerun()
 
     st.markdown("---")
-    cizq, cder = st.columns(2)
-    with cizq:
-        st.subheader("🚨 Casas Pendientes")
+    st.subheader("📋 Estado del Mes")
+    
+    view_morosos, view_pagos = st.tabs(["🔴 Casas Pendientes", "🟢 Pagos Realizados"])
+    
+    with view_morosos:
         deudores = df_casas.merge(df_pagos_mes[['calle', 'numero']], on=['calle', 'numero'], how='left', indicator=True)
         st.dataframe(deudores[deudores['_merge'] == 'left_only'].drop(columns='_merge'), use_container_width=True, hide_index=True)
-    with cder:
-        st.subheader("💰 Historial del Mes")
+        
+    with view_pagos:
         if not df_pagos_mes.empty:
             st.dataframe(df_pagos_mes[['calle', 'numero', 'propietario', 'fecha']], use_container_width=True, hide_index=True)
-            with st.form("anular"):
-                target = st.selectbox("Anular pago de:", [f"{r['calle']} #{r['numero']} - {r['propietario']}" for i, r in df_pagos_mes.iterrows()])
-                if st.form_submit_button("Confirmar Anulación"):
-                    c, n = target.split(" #")[0], int(target.split(" #")[1].split(" - ")[0])
-                    # Filtramos del dataframe FULL (todos los meses)
-                    df_actualizado = df_pagos_full[~((df_pagos_full['calle'] == c) & (df_pagos_full['numero'] == n) & (df_pagos_full['mes'] == mes_actual))]
-                    conn.update(worksheet="Pagos", data=df_actualizado)
-                    st.cache_data.clear()
-                    st.rerun()
+            
+            # Botón peligroso oculto en un acordeón
+            with st.expander("⚙️ Opciones Avanzadas (Anular un pago)"):
+                with st.form("anular"):
+                    st.warning("⚠️ Esta acción borrará el registro de la nube.")
+                    target = st.selectbox("Seleccione pago a eliminar:", [f"{r['calle']} #{r['numero']} - {r['propietario']}" for i, r in df_pagos_mes.iterrows()])
+                    if st.form_submit_button("Confirmar Anulación", use_container_width=True):
+                        c, n = target.split(" #")[0], int(target.split(" #")[1].split(" - ")[0])
+                        df_actualizado = df_pagos_full[~((df_pagos_full['calle'] == c) & (df_pagos_full['numero'] == n) & (df_pagos_full['mes'].astype(str).str.lower() == mes_actual.lower()))]
+                        conn.update(worksheet="Pagos", data=df_actualizado)
+                        st.cache_data.clear()
+                        st.toast("🗑️ Pago anulado correctamente.", icon="✅")
+                        st.rerun()
+        else:
+            st.info("Aún no hay pagos registrados en este mes.")
 
+# ==========================================
+# PESTAÑA 2: GASTOS
+# ==========================================
 with tab2:
-    st.header("Otros Gastos")
-    with st.form("gastos"):
-        d, m = st.text_input("Descripción"), st.number_input("Monto", min_value=0, step=500)
-        if st.form_submit_button("Registrar en Nube"):
+    st.subheader("🛒 Ingresar Nuevo Gasto")
+    with st.container():
+        d = st.text_input("Descripción del insumo/servicio", placeholder="Ej: Pilas, linterna, arreglos...")
+        m = st.number_input("Costo Total ($)", min_value=0, step=1000)
+        
+        if st.button("➕ Registrar Gasto", type="primary", use_container_width=True):
             if d and m > 0:
                 new_g = pd.DataFrame([{'descripcion': d, 'monto': int(m), 'fecha': datetime.now().strftime("%d/%m/%Y"), 'mes': mes_actual}])
                 df_actualizado = pd.concat([df_gastos_full, new_g], ignore_index=True)
                 conn.update(worksheet="Gastos", data=df_actualizado)
                 st.cache_data.clear()
+                st.toast("✅ Gasto registrado en la nube.", icon="💸")
                 st.rerun()
-    st.dataframe(df_gastos_mes[['descripcion', 'monto', 'fecha']], use_container_width=True, hide_index=True)
+            else:
+                st.error("Ingrese una descripción y monto válido.")
+                
+    st.markdown("---")
+    st.subheader("🧾 Historial de Compras")
+    if not df_gastos_mes.empty:
+        # Formatear la vista del dataframe para que se vea como dinero
+        st.dataframe(df_gastos_mes[['descripcion', 'monto', 'fecha']], use_container_width=True, hide_index=True)
+        
+        with st.expander("⚙️ Anular un Gasto"):
+            with st.form("borrar_gasto"):
+                target_g = st.selectbox("Seleccione gasto:", [f"{r['descripcion']} - ${r['monto']}" for i, r in df_gastos_mes.iterrows()])
+                if st.form_submit_button("Eliminar Gasto", use_container_width=True):
+                    desc_del, monto_del = target_g.split(" - $")
+                    df_actualizado = df_gastos_full[~((df_gastos_full['descripcion'] == desc_del) & (df_gastos_full['monto'] == int(monto_del)) & (df_gastos_full['mes'].astype(str).str.lower() == mes_actual.lower()))]
+                    conn.update(worksheet="Gastos", data=df_actualizado)
+                    st.cache_data.clear()
+                    st.toast("🗑️ Gasto eliminado.", icon="✅")
+                    st.rerun()
+    else:
+        st.info("Sin gastos registrados este mes.")
 
+# ==========================================
+# PESTAÑA 3: CIERRE
+# ==========================================
 with tab3:
-    st.header("Cierre de Mes")
-    pdf = generar_pdf_cierre(recaudado_actual, COSTO_TOTAL_GUARDIAS, TOTAL_OTROS_GASTOS, balance_total, df_guardias, df_gastos_mes, mes_actual)
-    st.download_button("📄 Descargar Reporte PDF", data=pdf, file_name=f"Reporte_{mes_actual}.pdf", mime="application/pdf")
+    st.subheader("📑 Reportes Oficiales")
+    st.write("Descarga los documentos de tesorería listos para imprimir o enviar por WhatsApp.")
     
-    st.write("---")
+    st.markdown("##### 1. Liquidación de Gastos (Balance)")
+    pdf = generar_pdf_cierre(recaudado_actual, COSTO_TOTAL_GUARDIAS, TOTAL_OTROS_GASTOS, balance_total, df_guardias, df_gastos_mes, mes_actual)
+    st.download_button("📄 Descargar PDF Final", data=pdf, file_name=f"Reporte_{mes_actual}.pdf", mime="application/pdf", use_container_width=True, type="primary")
+    
+    st.markdown("---")
+    st.markdown("##### 2. Lista de Vecinos Morosos")
     df_deudores = df_casas.merge(df_pagos_mes[['calle', 'numero']], on=['calle', 'numero'], how='left', indicator=True)
     df_deudores = df_deudores[df_deudores['_merge'] == 'left_only'].drop(columns=['_merge'])
     buffer = io.BytesIO()
@@ -243,27 +301,41 @@ with tab3:
             for cell in row:
                 cell.border, cell.alignment = borde, centrado
                 if cell.row == 3: cell.font = Font(bold=True)
-    st.download_button("📥 Descargar Deudores (Excel)", data=buffer.getvalue(), file_name=f"Deudores_{mes_actual}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    st.download_button("📥 Descargar Excel de Morosos", data=buffer.getvalue(), file_name=f"Deudores_{mes_actual}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
+# ==========================================
+# PESTAÑA 4: PERSONAL
+# ==========================================
 with tab4:
-    st.header("Personal (Sincronizado con Drive)")
-    col_add, col_del = st.columns(2)
-    with col_add:
+    st.subheader("👮‍♂️ Nómina de Guardias")
+    if not df_guardias.empty:
+        st.dataframe(df_guardias, use_container_width=True, hide_index=True)
+    else:
+        st.info("No hay guardias registrados.")
+        
+    st.markdown("---")
+    
+    with st.expander("➕ Contratar Nuevo Guardia"):
         with st.form("add_g"):
-            n, t, s = st.text_input("Nombre"), st.selectbox("Tipo", ["Full Time", "Part Time", "Reemplazo"]), st.number_input("Sueldo", value=450000)
-            if st.form_submit_button("Contratar"):
-                nuevo = pd.DataFrame([{'nombre': n, 'tipo': t, 'sueldo': int(s)}])
-                df_actualizado = pd.concat([df_guardias, nuevo], ignore_index=True)
-                conn.update(worksheet="Guardias", data=df_actualizado)
-                st.cache_data.clear()
-                st.rerun()
-    with col_del:
-        if not df_guardias.empty:
+            n = st.text_input("Nombre Completo")
+            t = st.selectbox("Tipo de Contrato", ["Full Time", "Part Time", "Reemplazo"])
+            s = st.number_input("Sueldo Acordado ($)", value=400000, step=10000)
+            if st.form_submit_button("Registrar Contrato", use_container_width=True):
+                if n:
+                    nuevo = pd.DataFrame([{'nombre': n, 'tipo': t, 'sueldo': int(s)}])
+                    df_actualizado = pd.concat([df_guardias, nuevo], ignore_index=True)
+                    conn.update(worksheet="Guardias", data=df_actualizado)
+                    st.cache_data.clear()
+                    st.toast(f"✅ Guardia {n} registrado.", icon="👮")
+                    st.rerun()
+
+    if not df_guardias.empty:
+        with st.expander("➖ Despedir / Eliminar Guardia"):
             with st.form("del_g"):
-                guardia_a_borrar = st.selectbox("Despedir", df_guardias['nombre'].tolist())
-                if st.form_submit_button("Confirmar"):
+                guardia_a_borrar = st.selectbox("Seleccione al trabajador", df_guardias['nombre'].tolist())
+                if st.form_submit_button("Confirmar Despido", use_container_width=True):
                     df_actualizado = df_guardias[df_guardias['nombre'] != guardia_a_borrar]
                     conn.update(worksheet="Guardias", data=df_actualizado)
                     st.cache_data.clear()
+                    st.toast("🗑️ Registro de guardia eliminado.", icon="✅")
                     st.rerun()
-    st.dataframe(df_guardias, use_container_width=True, hide_index=True)
