@@ -128,7 +128,7 @@ df_casas = cargar_casas()
 
 # --- BARRA LATERAL ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2622/2622240.png", width=100) # Un icono bonito decorativo
+    st.image("https://cdn-icons-png.flaticon.com/512/2622/2622240.png", width=100) 
     st.title("Panel de Control")
     st.markdown("---")
     meses_disponibles = ["Abril 2026", "Mayo 2026", "Junio 2026", "Julio 2026", "Agosto 2026", "Septiembre 2026", "Octubre 2026", "Noviembre 2026", "Diciembre 2026"]
@@ -321,7 +321,7 @@ with t4:
     
     st.markdown("---")
     df_deu = df_casas.merge(df_pagos_mes[['calle', 'numero']], on=['calle', 'numero'], how='left', indicator=True)
-    df_deu = df_deu[df_deu['_merge'] == 'left_only'].drop(columns='_merge')
+    df_deu = df_deu[df_deu['_merge'] == 'left_only'].drop(columns=['_merge'])
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine='openpyxl') as wr:
         df_impresion = df_deu.rename(columns={'calle': 'PASAJE', 'numero': 'N° CASA', 'propietario': 'PROPIETARIO'})
