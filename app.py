@@ -15,7 +15,6 @@ st.set_page_config(page_title="Seguridad Villa", page_icon="🛡️", layout="wi
 # ==========================================
 st.markdown("""
 <style>
-    /* Estilo para las métricas (Tarjetas flotantes) */
     div[data-testid="metric-container"] {
         background-color: var(--secondary-background-color);
         border: 1px solid rgba(49, 51, 63, 0.1);
@@ -29,8 +28,6 @@ st.markdown("""
         transform: translateY(-3px);
         box-shadow: 0px 6px 15px rgba(0,0,0,0.1);
     }
-    
-    /* Botones más modernos y redondeados */
     .stButton>button {
         border-radius: 20px !important;
         font-weight: 600 !important;
@@ -40,17 +37,9 @@ st.markdown("""
     .stButton>button:hover {
         transform: scale(1.02);
     }
-
-    /* Ocultar elementos innecesarios de Streamlit para un look más "App" */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    
-    /* Ajustes para el texto de los títulos */
-    h1, h2, h3 {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    
-    /* Acordeones más limpios */
+    h1, h2, h3 {font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;}
     .streamlit-expanderHeader {
         background-color: var(--secondary-background-color);
         border-radius: 8px;
@@ -89,25 +78,27 @@ if not st.session_state.autenticado:
 # --- CONEXIÓN A GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# MEMORIA INTELIGENTE: Lee cada 60 seg, evita bloqueos de Google
+@st.cache_data(ttl=60, show_spinner=False)
 def cargar_datos_nube():
     try:
-        df_p = conn.read(worksheet="Pagos", ttl=0).dropna(how="all")
+        df_p = conn.read(worksheet="Pagos").dropna(how="all")
         df_p['numero'] = pd.to_numeric(df_p['numero']).astype(int)
     except:
         df_p = pd.DataFrame(columns=['calle', 'numero', 'propietario', 'monto_pagado', 'fecha', 'mes'])
         
     try:
-        df_g = conn.read(worksheet="Gastos", ttl=0).dropna(how="all")
+        df_g = conn.read(worksheet="Gastos").dropna(how="all")
     except:
         df_g = pd.DataFrame(columns=['descripcion', 'monto', 'fecha', 'mes'])
 
     try:
-        df_ie = conn.read(worksheet="Ingresos_Extra", ttl=0).dropna(how="all")
+        df_ie = conn.read(worksheet="Ingresos_Extra").dropna(how="all")
     except:
         df_ie = pd.DataFrame(columns=['concepto', 'monto', 'fecha', 'mes'])
         
     try:
-        df_gu = conn.read(worksheet="Guardias", ttl=0).dropna(how="all")
+        df_gu = conn.read(worksheet="Guardias").dropna(how="all")
     except:
         df_gu = pd.DataFrame(columns=['nombre', 'tipo', 'sueldo'])
         
@@ -262,7 +253,9 @@ with t1:
                     a_sel = st.selectbox("Borrar registro de:", [f"{r['calle']} #{r['numero']} - {r['propietario']}" for _, r in df_pagos_mes.iterrows()])
                     if st.form_submit_button("Eliminar Pago", use_container_width=True):
                         c, n = a_sel.split(" #")[0], int(a_sel.split(" #")[1].split(" - ")[0])
-                        df_act = df_pagos_full[~((df_pagos_full['calle'] == c) & (df_pagos_full['numero'] == n) & (df_pagos_full['mes'].astype(str).str.lower() == mes_actual.lower()))]
+                        # Filtro y reindexado seguro para evitar "filas fantasma" en Google Sheets
+                        df_act = df_pagos_full[~((df_pagos_full['calle'] == c) & (df_pagos_full['numero'] == n) & (df_pagos_full['mes'].astype(str).str.lower() == mes_actual.lower()))].reset_index(drop=True)
+                        df_act = df_act.reindex(range(len(df_pagos_full)))
                         conn.update(worksheet="Pagos", data=df_act); st.cache_data.clear(); st.toast("Pago Anulado", icon="🗑️"); st.rerun()
 
 with t2:
@@ -286,7 +279,8 @@ with t2:
                 c_del, m_del = borrar_e.split(" - $")
                 monto_a_borrar = float(m_del)
                 df_extra_full['monto'] = pd.to_numeric(df_extra_full['monto'])
-                df_act = df_extra_full[~((df_extra_full['concepto'] == c_del) & (df_extra_full['monto'] == monto_a_borrar) & (df_extra_full['mes'].astype(str).str.lower() == mes_actual.lower()))]
+                df_act = df_extra_full[~((df_extra_full['concepto'] == c_del) & (df_extra_full['monto'] == monto_a_borrar) & (df_extra_full['mes'].astype(str).str.lower() == mes_actual.lower()))].reset_index(drop=True)
+                df_act = df_act.reindex(range(len(df_extra_full)))
                 conn.update(worksheet="Ingresos_Extra", data=df_act); st.cache_data.clear(); st.rerun()
 
 with t3:
@@ -309,7 +303,8 @@ with t3:
                 d_del, m_del = borrar_g.split(" - $")
                 monto_a_borrar = float(m_del)
                 df_gastos_full['monto'] = pd.to_numeric(df_gastos_full['monto'])
-                df_act = df_gastos_full[~((df_gastos_full['descripcion'] == d_del) & (df_gastos_full['monto'] == monto_a_borrar) & (df_gastos_full['mes'].astype(str).str.lower() == mes_actual.lower()))]
+                df_act = df_gastos_full[~((df_gastos_full['descripcion'] == d_del) & (df_gastos_full['monto'] == monto_a_borrar) & (df_gastos_full['mes'].astype(str).str.lower() == mes_actual.lower()))].reset_index(drop=True)
+                df_act = df_act.reindex(range(len(df_gastos_full)))
                 conn.update(worksheet="Gastos", data=df_act); st.cache_data.clear(); st.rerun()
 
 with t4:
@@ -355,5 +350,6 @@ with t5:
             with st.form("del_gu"):
                 g_borrar = st.selectbox("Seleccione empleado a eliminar", df_guardias['nombre'].tolist())
                 if st.form_submit_button("Confirmar Despido", use_container_width=True):
-                    df_act = df_guardias[df_guardias['nombre'] != g_borrar]
+                    df_act = df_guardias[df_guardias['nombre'] != g_borrar].reset_index(drop=True)
+                    df_act = df_act.reindex(range(len(df_guardias)))
                     conn.update(worksheet="Guardias", data=df_act); st.cache_data.clear(); st.rerun()
