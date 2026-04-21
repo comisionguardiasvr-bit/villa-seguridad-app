@@ -3,7 +3,7 @@ import pandas as pd
 import json
 import io
 from datetime import datetime
-from openpyxl.styles import Font, Alignment, Border, Side
+from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection
 import os
@@ -11,42 +11,30 @@ import os
 st.set_page_config(page_title="Tesorería Villa Raimapu", page_icon="🌿", layout="wide")
 
 # ==========================================
-# 🎨 DISEÑO Y ESTILOS PASTEL (ADAPTABLE)
+# 🎨 DISEÑO Y ESTILOS PASTEL
 # ==========================================
 st.markdown("""
 <style>
-    /* Títulos en tono verde pastel que resaltan en fondo negro o blanco */
-    h1, h2, h3, h4, h5 { color: #8fae9a !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    
-    /* Tarjetas de Métricas usando colores adaptables */
+    .reportview-container { background: #fdfcf9; color: #4a4a4a; }
+    h1, h2, h3, h4, h5 { color: #5a6e5f; }
     div[data-testid="metric-container"] {
-        background-color: var(--secondary-background-color);
-        border: 1px solid rgba(143, 174, 154, 0.3);
-        padding: 15px 20px; border-radius: 12px;
-        border-left: 5px solid #8fae9a; transition: transform 0.2s ease-in-out;
+        background-color: #ffffff; border: 1px solid #e0e0e0;
+        padding: 15px 20px; border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.03);
+        border-left: 5px solid #a8c3b1; transition: transform 0.2s ease-in-out;
     }
-    div[data-testid="metric-container"]:hover { transform: translateY(-3px); }
-    
-    /* Botones */
+    div[data-testid="metric-container"]:hover { transform: translateY(-3px); box-shadow: 0px 6px 15px rgba(0,0,0,0.06); }
     .stButton>button {
         border-radius: 20px !important; font-weight: 600 !important;
-        background-color: rgba(143, 174, 154, 0.8) !important;
-        color: white !important; border: none !important; transition: all 0.3s;
+        background-color: #a8c3b1; color: white; border: none; transition: all 0.3s;
     }
-    .stButton>button:hover { background-color: #728f7d !important; transform: scale(1.02); }
-    
-    /* Pestañas */
+    .stButton>button:hover { background-color: #8fae9a; transform: scale(1.02); }
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; border-radius: 10px 10px 0px 0px; }
-    .stTabs [aria-selected="true"] { border-bottom: 4px solid #8fae9a !important; color: #8fae9a !important; }
-    
-    /* Formularios solucionados: Usan el fondo adaptable de Streamlit */
-    div[data-testid="stForm"] { 
-        background-color: var(--secondary-background-color); 
-        padding: 20px; border-radius: 12px; 
-        border: 1px solid rgba(143, 174, 154, 0.4); 
+    .stTabs [data-baseweb="tab"] {
+        height: 50px; white-space: pre-wrap; background-color: #f0f0f0;
+        border-radius: 10px 10px 0px 0px; color: #4a4a4a;
     }
-    
+    .stTabs [aria-selected="true"] { background-color: #d8e2dc; color: #5a6e5f; font-weight: bold; }
+    div[data-testid="stForm"] { background-color: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e0e0e0; }
     #MainMenu, footer {visibility: hidden;}
     [data-testid="stImage"] img { border-radius: 25px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
 </style>
@@ -70,7 +58,7 @@ if not st.session_state.autenticado:
         if os.path.exists("logo_villa.jpg"): st.image("logo_villa.jpg", use_container_width=True)
         else: st.markdown("<h1 style='text-align: center; font-size: 4em;'>🌿</h1>", unsafe_allow_html=True)
     
-    st.markdown("<h2 style='text-align: center;'>Acceso al Sistema Raimapu</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #8fae9a;'>Acceso al Sistema Raimapu</h2>", unsafe_allow_html=True)
     
     _, col_login, _ = st.columns([1, 1.5, 1])
     with col_login:
@@ -92,34 +80,20 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # 🧠 MEMORIAS INDEPENDIENTES Y CACHÉ
 # ==========================================
 @st.cache_data(ttl=600, show_spinner=False)
-def cargar_pagos():
-    try: return conn.read(worksheet="Pagos", ttl=0).dropna(how="all").assign(numero=lambda x: pd.to_numeric(x['numero']).astype(int))
-    except: return pd.DataFrame(columns=['calle', 'numero', 'propietario', 'monto_pagado', 'fecha', 'mes', 'registrado_por'])
+def cargar_bd():
+    def get_df(sheet, cols):
+        try: return conn.read(worksheet=sheet, ttl=0).dropna(how="all")
+        except: return pd.DataFrame(columns=cols)
+    return (
+        get_df("Pagos", ['calle', 'numero', 'propietario', 'monto_pagado', 'fecha', 'mes', 'registrado_por']),
+        get_df("Gastos", ['descripcion', 'monto', 'fecha', 'mes']),
+        get_df("Ingresos_Extra", ['concepto', 'monto', 'fecha', 'mes']),
+        get_df("Guardias", ['nombre', 'tipo', 'sueldo']),
+        get_df("Logs", ['fecha_hora', 'usuario', 'accion', 'detalle']),
+        get_df("Ajustes_Guardias", ['mes', 'guardia', 'tipo', 'monto', 'detalle'])
+    )
 
-@st.cache_data(ttl=600, show_spinner=False)
-def cargar_gastos():
-    try: return conn.read(worksheet="Gastos", ttl=0).dropna(how="all")
-    except: return pd.DataFrame(columns=['descripcion', 'monto', 'fecha', 'mes'])
-
-@st.cache_data(ttl=600, show_spinner=False)
-def cargar_extra():
-    try: return conn.read(worksheet="Ingresos_Extra", ttl=0).dropna(how="all")
-    except: return pd.DataFrame(columns=['concepto', 'monto', 'fecha', 'mes'])
-
-@st.cache_data(ttl=600, show_spinner=False)
-def cargar_guardias():
-    try: return conn.read(worksheet="Guardias", ttl=0).dropna(how="all")
-    except: return pd.DataFrame(columns=['nombre', 'tipo', 'sueldo'])
-
-@st.cache_data(ttl=600, show_spinner=False)
-def cargar_logs():
-    try: return conn.read(worksheet="Logs", ttl=0).dropna(how="all")
-    except: return pd.DataFrame(columns=['fecha_hora', 'usuario', 'accion', 'detalle'])
-
-@st.cache_data(ttl=600, show_spinner=False)
-def cargar_ajustes():
-    try: return conn.read(worksheet="Ajustes_Guardias", ttl=0).dropna(how="all")
-    except: return pd.DataFrame(columns=['mes', 'guardia', 'tipo', 'monto', 'detalle'])
+df_pagos_full, df_gastos_full, df_extra_full, df_guardias, df_logs_full, df_ajustes_full = cargar_bd()
 
 @st.cache_data
 def cargar_casas():
@@ -127,28 +101,19 @@ def cargar_casas():
         df = pd.DataFrame(json.load(f))
         df['numero'] = pd.to_numeric(df['numero']).astype(int)
         return df.sort_values(by=['calle', 'numero']).reset_index(drop=True)
-
-df_pagos_full = cargar_pagos()
-df_gastos_full = cargar_gastos()
-df_extra_full = cargar_extra()
-df_guardias = cargar_guardias()
-df_logs_full = cargar_logs()
-df_ajustes_full = cargar_ajustes()
 df_casas = cargar_casas()
 
 # ==========================================
 # 🕵️‍♂️ FUNCIÓN DE AUDITORÍA (LOGS SILENCIOSOS)
 # ==========================================
 def registrar_log(accion, detalle):
-    df_l = cargar_logs()
     nuevo_log = pd.DataFrame([{'fecha_hora': datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 'usuario': st.session_state.usuario, 'accion': accion, 'detalle': detalle}])
-    conn.update(worksheet="Logs", data=pd.concat([df_l, nuevo_log], ignore_index=True))
-    cargar_logs.clear() 
+    conn.update(worksheet="Logs", data=pd.concat([df_logs_full, nuevo_log], ignore_index=True))
 
 # --- BARRA LATERAL ---
 with st.sidebar:
     if os.path.exists("logo_villa.jpg"): st.image("logo_villa.jpg", use_container_width=True)
-    st.markdown(f"<h3 style='text-align: center;'>Perfil: {st.session_state.rol}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align: center; color: #5a6e5f;'>Perfil: {st.session_state.rol}</h3>", unsafe_allow_html=True)
     st.markdown("---")
     mes_actual = st.selectbox("📅 Mes Operativo:", MESES_DISPONIBLES)
     st.markdown("---")
@@ -294,18 +259,48 @@ def generar_liquidacion_guardia(nombre, tipo, base, bonos, descuentos, total, me
 def generar_excel_morosos(df_morosos, mes_texto):
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine='openpyxl') as wr:
-        df_morosos.rename(columns={'calle': 'PASAJE', 'numero': 'N° CASA', 'propietario': 'PROPIETARIO'}).to_excel(wr, index=False, sheet_name='Morosos')
+        # Preparamos el dataframe solo con las 3 columnas necesarias y le ponemos los nombres de la foto
+        df_export = df_morosos[['calle', 'numero', 'propietario']].copy()
+        df_export.columns = [f"VECINOS MOROSOS - {mes_texto.upper()}", "N° CASA", "PROPIETARIO"]
+        
+        df_export.to_excel(wr, index=False, sheet_name='Morosos')
         ws = wr.sheets['Morosos']
-        ws['A1'] = f"VECINOS MOROSOS - {mes_texto.upper()}"
-        ws['A1'].font = Font(bold=True)
-        for col in ['A', 'B', 'C']: ws.column_dimensions[col].width = 20
+        
+        # Configuramos los estilos exactos de la imagen
+        azul_claro = PatternFill(start_color="9BC2E6", end_color="9BC2E6", fill_type="solid")
+        fuente_titulos = Font(name='Calibri', size=16, bold=True)
+        fuente_datos = Font(name='Calibri', size=11)
+        centrado = Alignment(horizontal="center", vertical="center")
+        borde_fino = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+        
+        # Ajustamos el ancho de las columnas
+        ws.column_dimensions['A'].width = 38
+        ws.column_dimensions['B'].width = 15
+        ws.column_dimensions['C'].width = 35
+        
+        # Aplicamos los estilos a toda la tabla
+        for col in range(1, 4):
+            # Fila 1 (Cabeceras azules)
+            cell_header = ws.cell(row=1, column=col)
+            cell_header.fill = azul_claro
+            cell_header.font = fuente_titulos
+            cell_header.alignment = centrado
+            cell_header.border = borde_fino
+            
+            # Filas de Datos (con borde y centradas)
+            for row in range(2, len(df_export) + 2):
+                cell_data = ws.cell(row=row, column=col)
+                cell_data.font = fuente_datos
+                cell_data.alignment = centrado
+                cell_data.border = borde_fino
+                
     return buf.getvalue()
 
 # ==========================================
 # INTERFAZ DEPENDIENDO DEL ROL
 # ==========================================
 if st.session_state.rol == "Recaudadora":
-    st.markdown(f"<h2>📱 Portal de Recaudación</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2>📱 Portal de Recaudación <span style='color: #8fae9a;'>| {mes_actual}</span></h2>", unsafe_allow_html=True)
     st.info("💡 Desde aquí puedes registrar los pagos en terreno. Usa la opción 'Meses a pagar' si un vecino paga por adelantado.")
     
     with st.container():
@@ -328,12 +323,12 @@ if st.session_state.rol == "Recaudadora":
                     nuevos_pagos.append({'calle': c_sel, 'numero': int(n_sel), 'propietario': nom, 'monto_pagado': CUOTA_MENSUAL, 'fecha': datetime.now().strftime("%Y-%m-%d %H:%M"), 'mes': m, 'registrado_por': st.session_state.usuario})
                 
                 conn.update(worksheet="Pagos", data=pd.concat([df_pagos_full, pd.DataFrame(nuevos_pagos)], ignore_index=True))
-                cargar_pagos.clear()
+                cargar_bd.clear()
                 registrar_log("Cobro Múltiple", f"Cobró {len(meses_a_pagar)} meses a casa {c_sel} {n_sel}")
                 st.toast("✅ Pagos guardados en la base central."); st.rerun()
 
 elif st.session_state.rol == "Admin":
-    st.markdown(f"<h2>🏢 Panel Administrativo</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2>🏢 Panel Administrativo <span style='color: #8fae9a;'>| {mes_actual}</span></h2>", unsafe_allow_html=True)
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Caja Chica Mes Anterior", f"${caja_chica_anterior:,.0f}")
     m2.metric("Nuevos Ingresos", f"${total_ingresos_mes:,.0f}")
@@ -354,7 +349,7 @@ elif st.session_state.rol == "Admin":
                         c, n = a_sel.split(" #")[0], int(a_sel.split(" #")[1].split(" - ")[0])
                         df_act = df_pagos_full[~((df_pagos_full['calle'] == c) & (df_pagos_full['numero'] == n) & (df_pagos_full['mes'] == mes_actual))].reset_index(drop=True)
                         conn.update(worksheet="Pagos", data=df_act.reindex(range(len(df_pagos_full))))
-                        cargar_pagos.clear()
+                        cargar_bd.clear()
                         registrar_log("Anulación Pago", f"Borró pago de {c} {n} del mes {mes_actual}")
                         st.rerun()
 
@@ -365,7 +360,7 @@ elif st.session_state.rol == "Admin":
             if st.form_submit_button("💰 Guardar", use_container_width=True) and con and mon > 0:
                 nuevo_e = pd.DataFrame([{'concepto': con, 'monto': int(mon), 'fecha': datetime.now().strftime("%d/%m/%Y"), 'mes': mes_actual}])
                 conn.update(worksheet="Ingresos_Extra", data=pd.concat([df_extra_full, nuevo_e], ignore_index=True))
-                cargar_extra.clear()
+                cargar_bd.clear()
                 registrar_log("Ingreso Extra", f"Agregó {mon} por {con}")
                 st.rerun()
         if not df_extra_mes.empty: 
@@ -376,7 +371,7 @@ elif st.session_state.rol == "Admin":
                     c_del, m_del = borrar_e.split(" - $")
                     df_act = df_extra_full[~((df_extra_full['concepto'] == c_del) & (df_extra_full['monto'] == float(m_del)) & (df_extra_full['mes'] == mes_actual))].reset_index(drop=True)
                     conn.update(worksheet="Ingresos_Extra", data=df_act.reindex(range(len(df_extra_full))))
-                    cargar_extra.clear()
+                    cargar_bd.clear()
                     registrar_log("Borró Ingreso Extra", f"Eliminó {c_del}")
                     st.rerun()
 
@@ -387,7 +382,7 @@ elif st.session_state.rol == "Admin":
             if st.form_submit_button("🚀 Registrar Gasto", use_container_width=True) and des and val > 0:
                 nuevo_g = pd.DataFrame([{'descripcion': des, 'monto': int(val), 'fecha': datetime.now().strftime("%d/%m/%Y"), 'mes': mes_actual}])
                 conn.update(worksheet="Gastos", data=pd.concat([df_gastos_full, nuevo_g], ignore_index=True))
-                cargar_gastos.clear()
+                cargar_bd.clear()
                 registrar_log("Nuevo Gasto", f"Gastó {val} en {des}")
                 st.rerun()
         if not df_gastos_mes.empty: 
@@ -398,7 +393,7 @@ elif st.session_state.rol == "Admin":
                     d_del, m_del = borrar_g.split(" - $")
                     df_act = df_gastos_full[~((df_gastos_full['descripcion'] == d_del) & (df_gastos_full['monto'] == float(m_del)) & (df_gastos_full['mes'] == mes_actual))].reset_index(drop=True)
                     conn.update(worksheet="Gastos", data=df_act.reindex(range(len(df_gastos_full))))
-                    cargar_gastos.clear()
+                    cargar_bd.clear()
                     registrar_log("Borró Gasto", f"Eliminó {d_del}")
                     st.rerun()
 
@@ -419,7 +414,7 @@ elif st.session_state.rol == "Admin":
                     if st.form_submit_button("Aplicar Novedad", use_container_width=True) and monto_aj > 0:
                         n_ajuste = pd.DataFrame([{'mes': mes_actual, 'guardia': g_sel, 'tipo': tipo_aj, 'monto': int(monto_aj), 'detalle': det_aj}])
                         conn.update(worksheet="Ajustes_Guardias", data=pd.concat([df_ajustes_full, n_ajuste], ignore_index=True))
-                        cargar_ajustes.clear()
+                        cargar_bd.clear()
                         registrar_log("Ajuste Sueldo", f"Aplicó {tipo_aj} de ${monto_aj} a {g_sel}")
                         st.rerun()
                             
