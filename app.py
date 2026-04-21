@@ -15,7 +15,6 @@ st.set_page_config(page_title="Tesorería Villa Raimapu", page_icon="🌿", layo
 # ==========================================
 st.markdown("""
 <style>
-    /* Uso de variables nativas de Streamlit para asegurar lectura perfecta */
     h1, h2, h3, h4, h5 { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #5a7d65 !important; }
     
     div[data-testid="metric-container"] {
@@ -52,12 +51,11 @@ st.markdown("""
 CUOTA_MENSUAL = 10000 
 MESES_DISPONIBLES = ["Abril 2026", "Mayo 2026", "Junio 2026", "Julio 2026", "Agosto 2026", "Septiembre 2026", "Octubre 2026", "Noviembre 2026", "Diciembre 2026"]
 
-# --- HELPER: Formato de Moneda Chilena ---
 def fmt_dinero(monto):
     return f"$ {int(monto):,.0f}".replace(",", ".")
 
 # ==========================================
-# 🔐 SISTEMA DE LOGIN EJECUTIVO
+# 🔐 SISTEMA DE LOGIN Y MULTI-USUARIOS
 # ==========================================
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
@@ -76,13 +74,23 @@ if not st.session_state.autenticado:
     _, col_login, _ = st.columns([1, 1.5, 1])
     with col_login:
         with st.form("login_form"):
-            tipo_usuario = st.selectbox("Perfil de Acceso:", ["Tesorera / Administradora", "Recaudadora en Terreno"])
+            tipo_usuario = st.selectbox("Perfil de Acceso:", [
+                "Tesorera / Administradora", 
+                "Recaudadora 1", 
+                "Recaudadora 2", 
+                "Recaudadora 3"
+            ])
             pass_input = st.text_input("🔑 Contraseña:", type="password")
             if st.form_submit_button("Ingresar al Sistema", use_container_width=True):
+                # Validaciones de contraseñas por usuario
                 if tipo_usuario == "Tesorera / Administradora" and pass_input == "villa2026":
                     st.session_state.autenticado = True; st.session_state.rol = "Admin"; st.session_state.usuario = "Tesorera Principal"; st.rerun()
-                elif tipo_usuario == "Recaudadora en Terreno" and pass_input == "recauda2026":
-                    st.session_state.autenticado = True; st.session_state.rol = "Recaudadora"; st.session_state.usuario = "Recaudadora Móvil"; st.rerun()
+                elif tipo_usuario == "Recaudadora 1" and pass_input == "recauda1":
+                    st.session_state.autenticado = True; st.session_state.rol = "Recaudadora"; st.session_state.usuario = "Recaudadora 1"; st.rerun()
+                elif tipo_usuario == "Recaudadora 2" and pass_input == "recauda2":
+                    st.session_state.autenticado = True; st.session_state.rol = "Recaudadora"; st.session_state.usuario = "Recaudadora 2"; st.rerun()
+                elif tipo_usuario == "Recaudadora 3" and pass_input == "recauda3":
+                    st.session_state.autenticado = True; st.session_state.rol = "Recaudadora"; st.session_state.usuario = "Recaudadora 3"; st.rerun()
                 else:
                     st.error("❌ Credenciales incorrectas. Verifique su contraseña.")
     st.stop()
@@ -146,7 +154,7 @@ def registrar_log(accion, detalle):
 # --- MENÚ LATERAL ---
 with st.sidebar:
     if os.path.exists("logo_villa.jpg"): st.image("logo_villa.jpg", use_container_width=True)
-    st.markdown(f"<h3 style='text-align: center; color: #5a7d65;'>{st.session_state.rol}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align: center; color: #5a7d65;'>👤 {st.session_state.usuario}</h3>", unsafe_allow_html=True)
     st.markdown("---")
     mes_actual = st.selectbox("📅 Período de Trabajo:", MESES_DISPONIBLES)
     st.markdown("---")
@@ -200,27 +208,6 @@ deudores_count = len(df_casas) - len(df_pagos_mes)
 # ==========================================
 # 📄 GENERADORES DE DOCUMENTOS FORMALES
 # ==========================================
-def generar_boleta_pdf(calle, numero, propietario, monto, fecha, mes_texto):
-    pdf = FPDF(format='A5') 
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 8, txt="COMPROBANTE DE PAGO", ln=True, align='C')
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(0, 6, txt="VILLA RAIMAPU - TIERRA FLORIDA", ln=True, align='C')
-    pdf.set_font("Arial", '', 9)
-    pdf.cell(0, 6, txt="PUENTE ALTO", ln=True, align='C')
-    pdf.ln(8)
-    pdf.set_font("Arial", 'B', 11)
-    pdf.cell(40, 8, txt="Fecha:", border=0); pdf.set_font("Arial", '', 11); pdf.cell(0, 8, txt=str(fecha), ln=True)
-    pdf.set_font("Arial", 'B', 11)
-    pdf.cell(40, 8, txt="Concepto:", border=0); pdf.set_font("Arial", '', 11); pdf.cell(0, 8, txt=f"Seguridad Mes {mes_texto}", ln=True)
-    pdf.set_font("Arial", 'B', 11)
-    pdf.cell(40, 8, txt="Vecino:", border=0); pdf.set_font("Arial", '', 11); pdf.cell(0, 8, txt=f"{propietario} (#{numero})", ln=True)
-    pdf.ln(5)
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, txt=f"TOTAL PAGADO: {fmt_dinero(monto)}", border=1, ln=True, align='C')
-    return pdf.output(dest='S').encode('latin-1', 'replace')
-
 def generar_pdf_cierre(ing_v, ing_e, egr_g, egr_o, bal, arrastre, df_ex, mes_t):
     pdf = FPDF()
     pdf.add_page()
@@ -332,7 +319,7 @@ def generar_excel_morosos(df_morosos, mes_texto):
 # ==========================================
 if st.session_state.rol == "Recaudadora":
     st.markdown(f"<h2>📱 Portal de Recaudación</h2>", unsafe_allow_html=True)
-    st.info("💡 Registre los pagos en terreno. Use la opción 'Meses a pagar' para abonos adelantados.")
+    st.info(f"💡 Has iniciado sesión como **{st.session_state.usuario}**. Registre los pagos en terreno. Use la opción 'Meses a pagar' para abonos adelantados.")
     
     with st.container():
         c_sel = st.selectbox("1. Seleccione Pasaje", df_casas['calle'].unique())
@@ -370,26 +357,26 @@ elif st.session_state.rol == "Admin":
     m3.metric("Fondo Total Disponible", fmt_dinero(balance_final))
     m4.metric("Casas Morosas", f"{deudores_count} pendientes")
     
-    t1, t2, t3, t4, t5 = st.tabs(["📝 1. Pagos Recibidos", "🎁 2. Ingresos Extra", "🛒 3. Gastos Operativos", "👮‍♂️ 4. Personal y Turnos", "📑 5. Documentos y Cierre"])
+    t1, t2, t3, t4, t5 = st.tabs(["📝 1. Visor de Pagos", "🎁 2. Ingresos Extra", "🛒 3. Gastos Operativos", "👮‍♂️ 4. Personal y Turnos", "📑 5. Documentos y Auditoría"])
 
     with t1:
-        st.markdown("#### 📋 Historial de Pagos del Mes")
-        if not df_pagos_mes.empty:
-            df_mostrar = df_pagos_mes[['calle', 'numero', 'propietario', 'fecha', 'registrado_por']].copy()
-            st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
-            with st.expander("❌ Anular un pago (Registrado en Auditoría)"):
-                with st.form("form_anular"):
-                    st.warning("Solo anule si se equivocó de casa o monto.")
-                    a_sel = st.selectbox("Seleccione el pago a borrar:", [f"{r['calle']} #{r['numero']} - {r['propietario']}" for _, r in df_pagos_mes.iterrows()])
-                    if st.form_submit_button("Eliminar Pago", use_container_width=True):
-                        c, n = a_sel.split(" #")[0], int(a_sel.split(" #")[1].split(" - ")[0])
-                        df_act = df_pagos_full[~((df_pagos_full['calle'] == c) & (df_pagos_full['numero'] == n) & (df_pagos_full['mes'] == mes_actual))].reset_index(drop=True)
-                        conn.update(worksheet="Pagos", data=df_act.reindex(range(len(df_pagos_full))))
-                        cargar_pagos.clear()
-                        registrar_log("Anulación Pago", f"Borró pago de {c} {n} del mes {mes_actual}")
-                        st.rerun()
+        st.markdown("#### 📋 Visor Global de Pagos")
+        st.write("Revise todos los pagos registrados por las recaudadoras. Por seguridad de cuadratura, la anulación directa ha sido deshabilitada.")
+        
+        filtro_mes = st.selectbox("Seleccione el mes a visualizar:", ["Ver todos los meses"] + MESES_DISPONIBLES)
+        
+        if not df_pagos_full.empty:
+            df_mostrar = df_pagos_full.copy()
+            if filtro_mes != "Ver todos los meses":
+                df_mostrar = df_mostrar[df_mostrar['mes'] == filtro_mes]
+            
+            if not df_mostrar.empty:
+                df_mostrar['monto_pagado'] = df_mostrar['monto_pagado'].apply(fmt_dinero)
+                st.dataframe(df_mostrar[['calle', 'numero', 'propietario', 'mes', 'monto_pagado', 'fecha', 'registrado_por']], use_container_width=True, hide_index=True)
+            else:
+                st.info(f"No hay pagos registrados para {filtro_mes}.")
         else:
-            st.info("No hay pagos registrados para este mes.")
+            st.info("Aún no hay pagos registrados en la base de datos.")
 
     with t2:
         st.markdown("#### 🎁 Registrar Ingresos Extra")
@@ -402,7 +389,9 @@ elif st.session_state.rol == "Admin":
                 registrar_log("Ingreso Extra", f"Agregó {fmt_dinero(mon)} por {con}")
                 st.rerun()
         if not df_extra_mes.empty: 
-            st.dataframe(df_extra_mes[['concepto', 'monto', 'fecha']], use_container_width=True, hide_index=True)
+            df_e_disp = df_extra_mes.copy()
+            df_e_disp['monto'] = df_e_disp['monto'].apply(fmt_dinero)
+            st.dataframe(df_e_disp[['concepto', 'monto', 'fecha']], use_container_width=True, hide_index=True)
             with st.expander("❌ Eliminar Ingreso Extra"):
                 borrar_e = st.selectbox("Seleccione evento a borrar", [f"{r['concepto']} - {fmt_dinero(r['monto'])}" for _, r in df_extra_mes.iterrows()])
                 if st.button("Eliminar Permanentemente"):
@@ -425,7 +414,9 @@ elif st.session_state.rol == "Admin":
                 registrar_log("Nuevo Gasto", f"Gastó {fmt_dinero(val)} en {des}")
                 st.rerun()
         if not df_gastos_mes.empty: 
-            st.dataframe(df_gastos_mes[['descripcion', 'monto', 'fecha']], use_container_width=True, hide_index=True)
+            df_g_disp = df_gastos_mes.copy()
+            df_g_disp['monto'] = df_g_disp['monto'].apply(fmt_dinero)
+            st.dataframe(df_g_disp[['descripcion', 'monto', 'fecha']], use_container_width=True, hide_index=True)
             with st.expander("❌ Eliminar Gasto"):
                 borrar_g = st.selectbox("Seleccione gasto a borrar", [f"{r['descripcion']} - {fmt_dinero(r['monto'])}" for _, r in df_gastos_mes.iterrows()])
                 if st.button("Confirmar Eliminación"):
@@ -444,6 +435,7 @@ elif st.session_state.rol == "Admin":
             st.markdown("##### 💵 Nómina Base")
             if not df_guardias.empty:
                 df_g_disp = df_guardias.copy()
+                df_g_disp['sueldo'] = df_g_disp['sueldo'].apply(fmt_dinero)
                 st.dataframe(df_g_disp, use_container_width=True, hide_index=True)
             else:
                 st.info("Sin personal registrado.")
@@ -464,28 +456,24 @@ elif st.session_state.rol == "Admin":
                             
         if not df_ajustes_mes.empty:
             st.markdown("##### 📝 Novedades registradas este mes:")
-            st.dataframe(df_ajustes_mes[['guardia', 'tipo', 'monto', 'detalle']], use_container_width=True, hide_index=True)
+            df_aj_disp = df_ajustes_mes.copy()
+            df_aj_disp['monto'] = df_aj_disp['monto'].apply(fmt_dinero)
+            st.dataframe(df_aj_disp[['guardia', 'tipo', 'monto', 'detalle']], use_container_width=True, hide_index=True)
 
     with t5:
-        st.markdown("#### 📑 Oficina Virtual de Tesorería")
-        st.write("Genera y descarga todos los documentos formales de la Villa.")
+        st.markdown("#### 📑 Oficina Virtual y Auditoría")
         
-        st.markdown("---")
         st.markdown("##### 📊 1. Balance General de Tesorería")
         doc_balance = generar_pdf_cierre(ingresos_vecinos, ingresos_eventos, egresos_guardias, egresos_otros, balance_final, caja_chica_anterior, df_extra_mes, mes_actual)
         st.download_button("📄 Descargar Balance Comunitario (PDF)", doc_balance, file_name=f"Balance_Raimapu_{mes_actual}.pdf", type="primary", use_container_width=True)
         
-        st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("##### 📝 2. Planilla de Cobranza")
         df_deu = df_casas.merge(df_pagos_mes[['calle', 'numero']], on=['calle', 'numero'], how='left', indicator=True)
         df_deu = df_deu[df_deu['_merge'] == 'left_only'].drop(columns=['_merge'])
         excel_morosos = generar_excel_morosos(df_deu, mes_actual)
         st.download_button("📥 Descargar Lista de Morosos (Excel)", excel_morosos, file_name=f"Morosos_{mes_actual}.xlsx", use_container_width=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("##### 👮‍♂️ 3. Liquidaciones de Sueldo (Guardias)")
-        st.write("Genera el recibo de pago individual con el cálculo exacto de bonos y descuentos para que el trabajador lo firme.")
-        
         if not df_guardias.empty:
             c_liq1, c_liq2 = st.columns([2, 1])
             with c_liq1:
@@ -500,3 +488,13 @@ elif st.session_state.rol == "Admin":
                 
                 pdf_liq = generar_liquidacion_guardia(guardia_liq, datos_g['tipo'], base, bonos, descuentos, total_pagar, mes_actual)
                 st.download_button("📄 Generar Liquidación", pdf_liq, file_name=f"Liquidacion_{guardia_liq.replace(' ', '_')}_{mes_actual}.pdf", use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("##### 🕵️‍♂️ 4. Auditoría y Transparencia (Logs)")
+        st.write("Registro imborrable de todos los movimientos del sistema realizados por Recaudadoras y Tesorería.")
+        st.dataframe(df_logs_full.tail(20).sort_index(ascending=False), use_container_width=True, hide_index=True)
+        
+        buf_logs = io.BytesIO()
+        with pd.ExcelWriter(buf_logs, engine='openpyxl') as wr:
+            df_logs_full.to_excel(wr, index=False, sheet_name='Auditoria')
+        st.download_button("📥 Descargar Planilla de Auditoría (Excel)", buf_logs.getvalue(), file_name=f"Auditoria_Raimapu_{mes_actual}.xlsx", use_container_width=True)
