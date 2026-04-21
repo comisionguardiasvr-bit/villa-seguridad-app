@@ -11,30 +11,42 @@ import os
 st.set_page_config(page_title="Tesorería Villa Raimapu", page_icon="🌿", layout="wide")
 
 # ==========================================
-# 🎨 DISEÑO Y ESTILOS PASTEL
+# 🎨 DISEÑO Y ESTILOS PASTEL (ADAPTABLE)
 # ==========================================
 st.markdown("""
 <style>
-    .reportview-container { background: #fdfcf9; color: #4a4a4a; }
-    h1, h2, h3, h4, h5 { color: #5a6e5f; }
+    /* Títulos en tono verde pastel que resaltan en fondo negro o blanco */
+    h1, h2, h3, h4, h5 { color: #8fae9a !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    
+    /* Tarjetas de Métricas usando colores adaptables */
     div[data-testid="metric-container"] {
-        background-color: #ffffff; border: 1px solid #e0e0e0;
-        padding: 15px 20px; border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.03);
-        border-left: 5px solid #a8c3b1; transition: transform 0.2s ease-in-out;
+        background-color: var(--secondary-background-color);
+        border: 1px solid rgba(143, 174, 154, 0.3);
+        padding: 15px 20px; border-radius: 12px;
+        border-left: 5px solid #8fae9a; transition: transform 0.2s ease-in-out;
     }
-    div[data-testid="metric-container"]:hover { transform: translateY(-3px); box-shadow: 0px 6px 15px rgba(0,0,0,0.06); }
+    div[data-testid="metric-container"]:hover { transform: translateY(-3px); }
+    
+    /* Botones */
     .stButton>button {
         border-radius: 20px !important; font-weight: 600 !important;
-        background-color: #a8c3b1; color: white; border: none; transition: all 0.3s;
+        background-color: rgba(143, 174, 154, 0.8) !important;
+        color: white !important; border: none !important; transition: all 0.3s;
     }
-    .stButton>button:hover { background-color: #8fae9a; transform: scale(1.02); }
+    .stButton>button:hover { background-color: #728f7d !important; transform: scale(1.02); }
+    
+    /* Pestañas */
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px; white-space: pre-wrap; background-color: #f0f0f0;
-        border-radius: 10px 10px 0px 0px; color: #4a4a4a;
+    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; border-radius: 10px 10px 0px 0px; }
+    .stTabs [aria-selected="true"] { border-bottom: 4px solid #8fae9a !important; color: #8fae9a !important; }
+    
+    /* Formularios solucionados: Usan el fondo adaptable de Streamlit */
+    div[data-testid="stForm"] { 
+        background-color: var(--secondary-background-color); 
+        padding: 20px; border-radius: 12px; 
+        border: 1px solid rgba(143, 174, 154, 0.4); 
     }
-    .stTabs [aria-selected="true"] { background-color: #d8e2dc; color: #5a6e5f; font-weight: bold; }
-    div[data-testid="stForm"] { background-color: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e0e0e0; }
+    
     #MainMenu, footer {visibility: hidden;}
     [data-testid="stImage"] img { border-radius: 25px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
 </style>
@@ -58,7 +70,7 @@ if not st.session_state.autenticado:
         if os.path.exists("logo_villa.jpg"): st.image("logo_villa.jpg", use_container_width=True)
         else: st.markdown("<h1 style='text-align: center; font-size: 4em;'>🌿</h1>", unsafe_allow_html=True)
     
-    st.markdown("<h2 style='text-align: center; color: #8fae9a;'>Acceso al Sistema Raimapu</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>Acceso al Sistema Raimapu</h2>", unsafe_allow_html=True)
     
     _, col_login, _ = st.columns([1, 1.5, 1])
     with col_login:
@@ -77,7 +89,7 @@ if not st.session_state.autenticado:
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # ==========================================
-# 🧠 MEMORIAS INDEPENDIENTES Y AISLADAS (ANTI-BLOQUEOS)
+# 🧠 MEMORIAS INDEPENDIENTES Y CACHÉ
 # ==========================================
 @st.cache_data(ttl=600, show_spinner=False)
 def cargar_pagos():
@@ -131,12 +143,12 @@ def registrar_log(accion, detalle):
     df_l = cargar_logs()
     nuevo_log = pd.DataFrame([{'fecha_hora': datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 'usuario': st.session_state.usuario, 'accion': accion, 'detalle': detalle}])
     conn.update(worksheet="Logs", data=pd.concat([df_l, nuevo_log], ignore_index=True))
-    cargar_logs.clear() # Limpia solo la memoria de los logs
+    cargar_logs.clear() 
 
 # --- BARRA LATERAL ---
 with st.sidebar:
     if os.path.exists("logo_villa.jpg"): st.image("logo_villa.jpg", use_container_width=True)
-    st.markdown(f"<h3 style='text-align: center; color: #5a6e5f;'>Perfil: {st.session_state.rol}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align: center;'>Perfil: {st.session_state.rol}</h3>", unsafe_allow_html=True)
     st.markdown("---")
     mes_actual = st.selectbox("📅 Mes Operativo:", MESES_DISPONIBLES)
     st.markdown("---")
@@ -293,7 +305,7 @@ def generar_excel_morosos(df_morosos, mes_texto):
 # INTERFAZ DEPENDIENDO DEL ROL
 # ==========================================
 if st.session_state.rol == "Recaudadora":
-    st.markdown(f"<h2>📱 Portal de Recaudación <span style='color: #8fae9a;'>| {mes_actual}</span></h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2>📱 Portal de Recaudación</h2>", unsafe_allow_html=True)
     st.info("💡 Desde aquí puedes registrar los pagos en terreno. Usa la opción 'Meses a pagar' si un vecino paga por adelantado.")
     
     with st.container():
@@ -316,12 +328,12 @@ if st.session_state.rol == "Recaudadora":
                     nuevos_pagos.append({'calle': c_sel, 'numero': int(n_sel), 'propietario': nom, 'monto_pagado': CUOTA_MENSUAL, 'fecha': datetime.now().strftime("%Y-%m-%d %H:%M"), 'mes': m, 'registrado_por': st.session_state.usuario})
                 
                 conn.update(worksheet="Pagos", data=pd.concat([df_pagos_full, pd.DataFrame(nuevos_pagos)], ignore_index=True))
-                cargar_pagos.clear() # Limpia solo pagos
+                cargar_pagos.clear()
                 registrar_log("Cobro Múltiple", f"Cobró {len(meses_a_pagar)} meses a casa {c_sel} {n_sel}")
                 st.toast("✅ Pagos guardados en la base central."); st.rerun()
 
 elif st.session_state.rol == "Admin":
-    st.markdown(f"<h2>🏢 Panel Administrativo <span style='color: #8fae9a;'>| {mes_actual}</span></h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2>🏢 Panel Administrativo</h2>", unsafe_allow_html=True)
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Caja Chica Mes Anterior", f"${caja_chica_anterior:,.0f}")
     m2.metric("Nuevos Ingresos", f"${total_ingresos_mes:,.0f}")
