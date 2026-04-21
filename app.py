@@ -11,70 +11,42 @@ import os
 st.set_page_config(page_title="Tesorería Villa Raimapu", page_icon="🌿", layout="wide")
 
 # ==========================================
-# 🎨 DISEÑO Y ESTILOS (Paleta Pastel Sobria y Bonita)
+# 🎨 DISEÑO Y ESTILOS (Adaptable a Modo Oscuro/Claro)
 # ==========================================
 st.markdown("""
 <style>
-    /* Fondo principal y textos */
-    .reportview-container {
-        background: #fdfcf9; /* Crema muy pálido */
-        color: #4a4a4a; /* Gris oscuro sobrio */
-    }
-    h1, h2, h3 { color: #5a6e5f; } /* Verde musgo suave */
-
-    /* Tarjetas de Métricas */
+    /* Métricas con tinte verde suave adaptable */
     div[data-testid="metric-container"] {
-        background-color: #ffffff; 
-        border: 1px solid #e0e0e0;
-        padding: 15px 20px; border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.03);
-        border-left: 5px solid #a8c3b1; /* Verde pastel suave */
-        transition: transform 0.2s ease-in-out;
+        background-color: rgba(143, 174, 154, 0.1);
+        border: 1px solid rgba(143, 174, 154, 0.3);
+        padding: 15px 20px; border-radius: 12px;
+        border-left: 5px solid #8fae9a; transition: transform 0.2s ease-in-out;
     }
     div[data-testid="metric-container"]:hover {
         transform: translateY(-3px);
-        box-shadow: 0px 6px 15px rgba(0,0,0,0.06);
     }
-
-    /* Botones */
+    
+    /* Botones redondeados estilo pastel */
     .stButton>button {
-        border-radius: 20px !important;
-        font-weight: 600 !important;
-        background-color: #a8c3b1; /* Verde pastel suave */
-        color: white;
-        border: none;
-        transition: all 0.3s;
+        border-radius: 20px !important; font-weight: 600 !important;
+        background-color: rgba(143, 174, 154, 0.8) !important;
+        color: white !important; border: none !important;
     }
     .stButton>button:hover {
-        background-color: #8fae9a; /* Un tono más oscuro para el hover */
-        transform: scale(1.02);
+        background-color: #728f7d !important;
     }
-
-    /* Pestañas */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
+    
+    /* Formularios con fondos sutiles que respetan el color del texto */
+    div[data-testid="stForm"] {
+        border-radius: 15px;
+        border: 1px solid rgba(143, 174, 154, 0.3);
+        background-color: rgba(143, 174, 154, 0.05);
     }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: #f0f0f0;
-        border-radius: 10px 10px 0px 0px;
-        color: #4a4a4a;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #d8e2dc; /* Beige pastel muy suave */
-        color: #5a6e5f;
-        font-weight: bold;
-    }
-
-    /* Formularios y entradas */
-    .stForm {
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 12px;
-        border: 1px solid #e0e0e0;
-    }
-    .stTextInput>div>div>input, .stSelectbox>div>div>div>select {
-        border-radius: 8px;
+    
+    /* Esquinas redondeadas para el Logo */
+    [data-testid="stImage"] img {
+        border-radius: 25px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
 
     #MainMenu, footer {visibility: hidden;}
@@ -94,12 +66,14 @@ if 'autenticado' not in st.session_state:
 
 if not st.session_state.autenticado:
     st.markdown("<br><br>", unsafe_allow_html=True)
-    _, col_logo, _ = st.columns([1.5, 1, 1.5])
+    
+    # Logo centrado y más pequeño (usando columnas más anchas a los lados)
+    _, col_logo, _ = st.columns([2.5, 1.5, 2.5])
     with col_logo:
         if os.path.exists("logo_villa.jpg"): st.image("logo_villa.jpg", use_container_width=True)
         else: st.markdown("<h1 style='text-align: center; font-size: 4em;'>🌿</h1>", unsafe_allow_html=True)
     
-    st.markdown("<h2 style='text-align: center; color: #2e7d32;'>Acceso al Sistema Raimapu</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #8fae9a;'>Acceso al Sistema Raimapu</h2>", unsafe_allow_html=True)
     
     _, col_login, _ = st.columns([1, 1.5, 1])
     with col_login:
@@ -155,7 +129,7 @@ def registrar_log(accion, detalle):
 # --- BARRA LATERAL ---
 with st.sidebar:
     if os.path.exists("logo_villa.jpg"): st.image("logo_villa.jpg", use_container_width=True)
-    st.markdown(f"<h3 style='text-align: center; color: #5a6e5f;'>Hola, {st.session_state.rol}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align: center; color: #8fae9a;'>Hola, {st.session_state.rol}</h3>", unsafe_allow_html=True)
     st.markdown("---")
     mes_actual = st.selectbox("📅 Mes Operativo:", MESES_DISPONIBLES)
     st.markdown("---")
@@ -203,7 +177,6 @@ total_egresos_mes = egresos_guardias + egresos_otros
 balance_final = caja_chica_anterior + total_ingresos_mes - total_egresos_mes
 deudores_count = len(df_casas) - len(df_pagos_mes)
 
-# --- GENERADORES DE PDF (fpdt) - Simplificado para el chat ---
 def generar_excel_morosos(df_morosos, mes_texto):
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine='openpyxl') as wr:
@@ -217,7 +190,7 @@ def generar_excel_morosos(df_morosos, mes_texto):
 # INTERFAZ DEPENDIENDO DEL ROL
 # ==========================================
 if st.session_state.rol == "Recaudadora":
-    st.markdown(f"<h2>📱 Portal de Recaudación <span style='color: #2e7d32;'>| {mes_actual}</span></h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2>📱 Portal de Recaudación <span style='color: #8fae9a;'>| {mes_actual}</span></h2>", unsafe_allow_html=True)
     st.info("💡 Desde aquí puedes registrar los pagos en terreno. Usa la opción 'Meses a pagar' si un vecino paga por adelantado.")
     
     with st.container():
@@ -245,7 +218,7 @@ if st.session_state.rol == "Recaudadora":
                 cargar_bd.clear(); st.toast("✅ Pagos guardados en la base central."); st.rerun()
 
 elif st.session_state.rol == "Admin":
-    st.markdown(f"<h2>🏢 Panel Administrativo <span style='color: #2e7d32;'>| {mes_actual}</span></h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2>🏢 Panel Administrativo <span style='color: #8fae9a;'>| {mes_actual}</span></h2>", unsafe_allow_html=True)
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Caja Chica Anterior", f"${caja_chica_anterior:,.0f}", help="Dinero que sobró de meses pasados")
     m2.metric("Ingresos del Mes", f"${total_ingresos_mes:,.0f}", help="Vecinos + Eventos")
@@ -270,7 +243,7 @@ elif st.session_state.rol == "Admin":
                         registrar_log("Anulación Pago", f"Borró pago de {c} {n} del mes {mes_actual}")
                         cargar_bd.clear(); st.rerun()
 
-    # PESTAÑA 2 y 3: EXTRA Y GASTOS
+    # PESTAÑA 2: EXTRA
     with t2:
         st.markdown("#### 🎁 Registrar Ingresos Extra")
         with st.form("form_extra"):
@@ -279,8 +252,19 @@ elif st.session_state.rol == "Admin":
                 nuevo_e = pd.DataFrame([{'concepto': con, 'monto': int(mon), 'fecha': datetime.now().strftime("%d/%m/%Y"), 'mes': mes_actual}])
                 conn.update(worksheet="Ingresos_Extra", data=pd.concat([df_extra_full, nuevo_e], ignore_index=True))
                 registrar_log("Ingreso Extra", f"Agregó {mon} por {con}"); cargar_bd.clear(); st.rerun()
-        if not df_extra_mes.empty: st.dataframe(df_extra_mes[['concepto', 'monto']], use_container_width=True, hide_index=True)
+        if not df_extra_mes.empty: 
+            st.dataframe(df_extra_mes[['concepto', 'monto']], use_container_width=True, hide_index=True)
+            with st.expander("❌ Eliminar Ingreso Extra"):
+                borrar_e = st.selectbox("Seleccione evento a borrar", [f"{r['concepto']} - ${r['monto']}" for _, r in df_extra_mes.iterrows()])
+                if st.button("Eliminar Permanentemente"):
+                    c_del, m_del = borrar_e.split(" - $")
+                    monto_a_borrar = float(m_del)
+                    df_extra_full['monto'] = pd.to_numeric(df_extra_full['monto'])
+                    df_act = df_extra_full[~((df_extra_full['concepto'] == c_del) & (df_extra_full['monto'] == monto_a_borrar) & (df_extra_full['mes'].astype(str).str.lower() == mes_actual.lower()))].reset_index(drop=True)
+                    conn.update(worksheet="Ingresos_Extra", data=df_act.reindex(range(len(df_extra_full))))
+                    cargar_bd.clear(); st.rerun()
 
+    # PESTAÑA 3: GASTOS
     with t3:
         st.markdown("#### 🛒 Registrar Gasto de la Villa")
         with st.form("form_gastos"):
@@ -289,7 +273,17 @@ elif st.session_state.rol == "Admin":
                 nuevo_g = pd.DataFrame([{'descripcion': des, 'monto': int(val), 'fecha': datetime.now().strftime("%d/%m/%Y"), 'mes': mes_actual}])
                 conn.update(worksheet="Gastos", data=pd.concat([df_gastos_full, nuevo_g], ignore_index=True))
                 registrar_log("Nuevo Gasto", f"Gastó {val} en {des}"); cargar_bd.clear(); st.rerun()
-        if not df_gastos_mes.empty: st.dataframe(df_gastos_mes[['descripcion', 'monto']], use_container_width=True, hide_index=True)
+        if not df_gastos_mes.empty: 
+            st.dataframe(df_gastos_mes[['descripcion', 'monto']], use_container_width=True, hide_index=True)
+            with st.expander("❌ Eliminar Gasto"):
+                borrar_g = st.selectbox("Seleccione gasto a borrar", [f"{r['descripcion']} - ${r['monto']}" for _, r in df_gastos_mes.iterrows()])
+                if st.button("Confirmar Eliminación"):
+                    d_del, m_del = borrar_g.split(" - $")
+                    monto_a_borrar = float(m_del)
+                    df_gastos_full['monto'] = pd.to_numeric(df_gastos_full['monto'])
+                    df_act = df_gastos_full[~((df_gastos_full['descripcion'] == d_del) & (df_gastos_full['monto'] == monto_a_borrar) & (df_gastos_full['mes'].astype(str).str.lower() == mes_actual.lower()))].reset_index(drop=True)
+                    conn.update(worksheet="Gastos", data=df_act.reindex(range(len(df_gastos_full))))
+                    cargar_bd.clear(); st.rerun()
 
     # PESTAÑA 4: PERSONAL Y TURNOS
     with t4:
