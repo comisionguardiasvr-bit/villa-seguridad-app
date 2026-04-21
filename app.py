@@ -78,33 +78,36 @@ if not st.session_state.autenticado:
 # --- CONEXIÓN A GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# MEMORIA INTELIGENTE: Lee cada 60 seg, evita bloqueos de Google
-@st.cache_data(ttl=60, show_spinner=False)
-def cargar_datos_nube():
+# ==========================================
+# 🧠 MEMORIAS INDEPENDIENTES (Anti-Bloqueos)
+# ==========================================
+@st.cache_data(ttl=600, show_spinner=False)
+def cargar_pagos():
     try:
-        df_p = conn.read(worksheet="Pagos").dropna(how="all")
-        df_p['numero'] = pd.to_numeric(df_p['numero']).astype(int)
-    except:
-        df_p = pd.DataFrame(columns=['calle', 'numero', 'propietario', 'monto_pagado', 'fecha', 'mes'])
-        
-    try:
-        df_g = conn.read(worksheet="Gastos").dropna(how="all")
-    except:
-        df_g = pd.DataFrame(columns=['descripcion', 'monto', 'fecha', 'mes'])
+        df = conn.read(worksheet="Pagos", ttl=0).dropna(how="all")
+        df['numero'] = pd.to_numeric(df['numero']).astype(int)
+        return df
+    except: return pd.DataFrame(columns=['calle', 'numero', 'propietario', 'monto_pagado', 'fecha', 'mes'])
 
-    try:
-        df_ie = conn.read(worksheet="Ingresos_Extra").dropna(how="all")
-    except:
-        df_ie = pd.DataFrame(columns=['concepto', 'monto', 'fecha', 'mes'])
-        
-    try:
-        df_gu = conn.read(worksheet="Guardias").dropna(how="all")
-    except:
-        df_gu = pd.DataFrame(columns=['nombre', 'tipo', 'sueldo'])
-        
-    return df_p, df_g, df_ie, df_gu
+@st.cache_data(ttl=600, show_spinner=False)
+def cargar_gastos():
+    try: return conn.read(worksheet="Gastos", ttl=0).dropna(how="all")
+    except: return pd.DataFrame(columns=['descripcion', 'monto', 'fecha', 'mes'])
 
-df_pagos_full, df_gastos_full, df_extra_full, df_guardias = cargar_datos_nube()
+@st.cache_data(ttl=600, show_spinner=False)
+def cargar_extra():
+    try: return conn.read(worksheet="Ingresos_Extra", ttl=0).dropna(how="all")
+    except: return pd.DataFrame(columns=['concepto', 'monto', 'fecha', 'mes'])
+
+@st.cache_data(ttl=600, show_spinner=False)
+def cargar_guardias():
+    try: return conn.read(worksheet="Guardias", ttl=0).dropna(how="all")
+    except: return pd.DataFrame(columns=['nombre', 'tipo', 'sueldo'])
+
+df_pagos_full = cargar_pagos()
+df_gastos_full = cargar_gastos()
+df_extra_full = cargar_extra()
+df_guardias = cargar_guardias()
 
 # --- CARGA DE CASAS (Maestro local) ---
 @st.cache_data
@@ -232,7 +235,8 @@ with t1:
                 nom = df_casas[(df_casas['calle'] == c_sel) & (df_casas['numero'] == n_sel)]['propietario'].values[0]
                 nuevo = pd.DataFrame([{'calle': c_sel, 'numero': int(n_sel), 'propietario': nom, 'monto_pagado': CUOTA_MENSUAL, 'fecha': datetime.now().strftime("%Y-%m-%d %H:%M"), 'mes': mes_actual}])
                 conn.update(worksheet="Pagos", data=pd.concat([df_pagos_full, nuevo], ignore_index=True))
-                st.cache_data.clear(); st.toast(f"Pago de {nom} guardado", icon="✅"); st.rerun()
+                cargar_pagos.clear() # ¡Magia! Solo limpia la memoria de los pagos
+                st.toast(f"Pago de {nom} guardado", icon="✅"); st.rerun()
 
     st.markdown("---")
     st.markdown("#### 📋 Historial del Mes")
@@ -253,10 +257,11 @@ with t1:
                     a_sel = st.selectbox("Borrar registro de:", [f"{r['calle']} #{r['numero']} - {r['propietario']}" for _, r in df_pagos_mes.iterrows()])
                     if st.form_submit_button("Eliminar Pago", use_container_width=True):
                         c, n = a_sel.split(" #")[0], int(a_sel.split(" #")[1].split(" - ")[0])
-                        # Filtro y reindexado seguro para evitar "filas fantasma" en Google Sheets
                         df_act = df_pagos_full[~((df_pagos_full['calle'] == c) & (df_pagos_full['numero'] == n) & (df_pagos_full['mes'].astype(str).str.lower() == mes_actual.lower()))].reset_index(drop=True)
                         df_act = df_act.reindex(range(len(df_pagos_full)))
-                        conn.update(worksheet="Pagos", data=df_act); st.cache_data.clear(); st.toast("Pago Anulado", icon="🗑️"); st.rerun()
+                        conn.update(worksheet="Pagos", data=df_act)
+                        cargar_pagos.clear()
+                        st.toast("Pago Anulado", icon="🗑️"); st.rerun()
 
 with t2:
     st.markdown("#### 🎁 Registrar Ingresos Extra")
@@ -268,7 +273,8 @@ with t2:
             if con and mon > 0:
                 nuevo_e = pd.DataFrame([{'concepto': con, 'monto': int(mon), 'fecha': datetime.now().strftime("%d/%m/%Y"), 'mes': mes_actual}])
                 conn.update(worksheet="Ingresos_Extra", data=pd.concat([df_extra_full, nuevo_e], ignore_index=True))
-                st.cache_data.clear(); st.toast("Ingreso guardado correctamente", icon="🎉"); st.rerun()
+                cargar_extra.clear()
+                st.toast("Ingreso guardado correctamente", icon="🎉"); st.rerun()
     
     if not df_extra_mes.empty:
         st.markdown("#### 📋 Eventos del Mes")
@@ -281,7 +287,9 @@ with t2:
                 df_extra_full['monto'] = pd.to_numeric(df_extra_full['monto'])
                 df_act = df_extra_full[~((df_extra_full['concepto'] == c_del) & (df_extra_full['monto'] == monto_a_borrar) & (df_extra_full['mes'].astype(str).str.lower() == mes_actual.lower()))].reset_index(drop=True)
                 df_act = df_act.reindex(range(len(df_extra_full)))
-                conn.update(worksheet="Ingresos_Extra", data=df_act); st.cache_data.clear(); st.rerun()
+                conn.update(worksheet="Ingresos_Extra", data=df_act)
+                cargar_extra.clear()
+                st.rerun()
 
 with t3:
     st.markdown("#### 🛒 Ingresar Nuevo Gasto")
@@ -292,7 +300,8 @@ with t3:
             if des and val > 0:
                 nuevo_g = pd.DataFrame([{'descripcion': des, 'monto': int(val), 'fecha': datetime.now().strftime("%d/%m/%Y"), 'mes': mes_actual}])
                 conn.update(worksheet="Gastos", data=pd.concat([df_gastos_full, nuevo_g], ignore_index=True))
-                st.cache_data.clear(); st.toast("Gasto registrado", icon="💸"); st.rerun()
+                cargar_gastos.clear()
+                st.toast("Gasto registrado", icon="💸"); st.rerun()
                 
     if not df_gastos_mes.empty:
         st.markdown("#### 🧾 Historial de Compras")
@@ -305,7 +314,9 @@ with t3:
                 df_gastos_full['monto'] = pd.to_numeric(df_gastos_full['monto'])
                 df_act = df_gastos_full[~((df_gastos_full['descripcion'] == d_del) & (df_gastos_full['monto'] == monto_a_borrar) & (df_gastos_full['mes'].astype(str).str.lower() == mes_actual.lower()))].reset_index(drop=True)
                 df_act = df_act.reindex(range(len(df_gastos_full)))
-                conn.update(worksheet="Gastos", data=df_act); st.cache_data.clear(); st.rerun()
+                conn.update(worksheet="Gastos", data=df_act)
+                cargar_gastos.clear()
+                st.rerun()
 
 with t4:
     st.markdown("#### 📑 Cierre de Tesorería")
@@ -343,7 +354,8 @@ with t5:
                 if n_gu:
                     n_reg = pd.DataFrame([{'nombre': n_gu, 'tipo': t_gu, 'sueldo': int(s_gu)}])
                     conn.update(worksheet="Guardias", data=pd.concat([df_guardias, n_reg], ignore_index=True))
-                    st.cache_data.clear(); st.toast("Guardia contratado", icon="✅"); st.rerun()
+                    cargar_guardias.clear()
+                    st.toast("Guardia contratado", icon="✅"); st.rerun()
                     
     if not df_guardias.empty:
         with st.expander("➖ Desvincular Guardia"):
@@ -352,4 +364,6 @@ with t5:
                 if st.form_submit_button("Confirmar Despido", use_container_width=True):
                     df_act = df_guardias[df_guardias['nombre'] != g_borrar].reset_index(drop=True)
                     df_act = df_act.reindex(range(len(df_guardias)))
-                    conn.update(worksheet="Guardias", data=df_act); st.cache_data.clear(); st.rerun()
+                    conn.update(worksheet="Guardias", data=df_act)
+                    cargar_guardias.clear()
+                    st.rerun()
