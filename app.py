@@ -15,6 +15,7 @@ st.set_page_config(page_title="Tesorería Villa Raimapu", page_icon="🌿", layo
 # ==========================================
 st.markdown("""
 <style>
+    /* Uso de variables nativas de Streamlit para asegurar lectura perfecta */
     h1, h2, h3, h4, h5 { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #5a7d65 !important; }
     
     div[data-testid="metric-container"] {
@@ -51,11 +52,12 @@ st.markdown("""
 CUOTA_MENSUAL = 10000 
 MESES_DISPONIBLES = ["Abril 2026", "Mayo 2026", "Junio 2026", "Julio 2026", "Agosto 2026", "Septiembre 2026", "Octubre 2026", "Noviembre 2026", "Diciembre 2026"]
 
+# --- HELPER: Formato de Moneda Chilena ---
 def fmt_dinero(monto):
     return f"$ {int(monto):,.0f}".replace(",", ".")
 
 # ==========================================
-# 🔐 SISTEMA DE LOGIN Y MULTI-USUARIOS
+# 🔐 SISTEMA DE LOGIN EJECUTIVO
 # ==========================================
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
@@ -82,7 +84,6 @@ if not st.session_state.autenticado:
             ])
             pass_input = st.text_input("🔑 Contraseña:", type="password")
             if st.form_submit_button("Ingresar al Sistema", use_container_width=True):
-                # Validaciones de contraseñas por usuario
                 if tipo_usuario == "Tesorera / Administradora" and pass_input == "villa2026":
                     st.session_state.autenticado = True; st.session_state.rol = "Admin"; st.session_state.usuario = "Tesorera Principal"; st.rerun()
                 elif tipo_usuario == "Recaudadora 1" and pass_input == "recauda1":
@@ -319,7 +320,8 @@ def generar_excel_morosos(df_morosos, mes_texto):
 # ==========================================
 if st.session_state.rol == "Recaudadora":
     st.markdown(f"<h2>📱 Portal de Recaudación</h2>", unsafe_allow_html=True)
-    st.info(f"💡 Has iniciado sesión como **{st.session_state.usuario}**. Registre los pagos en terreno. Use la opción 'Meses a pagar' para abonos adelantados.")
+    st.info(f"💡 Has iniciado sesión como **{st.session_state.usuario}**. Registre los pagos de los vecinos aquí.")
+    st.warning("⚠️ **¿Te equivocaste anotando un pago?** No te preocupes. Avísale a la Tesorera indicando la casa y ella lo anulará en el sistema de manera segura.")
     
     with st.container():
         c_sel = st.selectbox("1. Seleccione Pasaje", df_casas['calle'].unique())
@@ -331,10 +333,10 @@ if st.session_state.rol == "Recaudadora":
             opc = {f"N° {r['numero']} - {r['propietario']}": r['numero'] for _, r in pend.iterrows()}
             n_sel = opc[st.selectbox("2. Seleccione Casa", opc.keys())]
             
-            meses_a_pagar = st.multiselect("3. Meses que está pagando:", MESES_DISPONIBLES, default=[mes_actual])
-            st.warning(f"Monto Total a Cobrar: **{fmt_dinero(len(meses_a_pagar) * CUOTA_MENSUAL)}**")
+            meses_a_pagar = st.multiselect("3. Meses que está pagando (Útil para abonos adelantados):", MESES_DISPONIBLES, default=[mes_actual])
+            st.markdown(f"<h4 style='text-align: center; color: #d35400;'>Monto Total a Cobrar: {fmt_dinero(len(meses_a_pagar) * CUOTA_MENSUAL)}</h4>", unsafe_allow_html=True)
             
-            if st.button("💳 Registrar Pagos", type="primary", use_container_width=True):
+            if st.button("💳 Confirmar y Registrar Pagos", type="primary", use_container_width=True):
                 nom = df_casas[(df_casas['calle'] == c_sel) & (df_casas['numero'] == n_sel)]['propietario'].values[0]
                 nuevos_pagos = []
                 for m in meses_a_pagar:
@@ -349,7 +351,7 @@ if st.session_state.rol == "Recaudadora":
 # INTERFAZ: ADMINISTRADORA / TESORERÍA
 # ==========================================
 elif st.session_state.rol == "Admin":
-    st.markdown(f"<h2>🏢 Panel Administrativo</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2>🏢 Panel Administrativo Tesorería</h2>", unsafe_allow_html=True)
     
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Caja Chica Mes Anterior", fmt_dinero(caja_chica_anterior))
@@ -361,9 +363,9 @@ elif st.session_state.rol == "Admin":
 
     with t1:
         st.markdown("#### 📋 Visor Global de Pagos")
-        st.write("Revise todos los pagos registrados por las recaudadoras. Por seguridad de cuadratura, la anulación directa ha sido deshabilitada.")
+        st.write("Revise todos los pagos registrados por las recaudadoras.")
         
-        filtro_mes = st.selectbox("Seleccione el mes a visualizar:", ["Ver todos los meses"] + MESES_DISPONIBLES)
+        filtro_mes = st.selectbox("Filtrar la tabla por mes:", ["Ver todos los meses"] + MESES_DISPONIBLES)
         
         if not df_pagos_full.empty:
             df_mostrar = df_pagos_full.copy()
@@ -378,11 +380,36 @@ elif st.session_state.rol == "Admin":
         else:
             st.info("Aún no hay pagos registrados en la base de datos.")
 
+        st.markdown("---")
+        st.markdown("#### 🛠️ Corregir Errores (Anular Pago)")
+        st.write("Si una recaudadora te informa de un error, busca el pago exacto en esta lista y elimínalo.")
+        
+        if not df_pagos_full.empty:
+            with st.expander("Abrir panel de corrección"):
+                with st.form("form_anular"):
+                    st.warning("⚠️ Al eliminar el pago, el dinero se descontará automáticamente de la caja. Quedará un registro en Auditoría.")
+                    
+                    # Creamos una lista inteligente con el Índice real del dato para no fallar jamás
+                    opciones_borrar = {f"ID: {idx} | {r['calle']} #{r['numero']} ({r['mes']}) - Ingresado por {r['registrado_por']} el {r['fecha']}": idx for idx, r in df_pagos_full.iterrows()}
+                    sel_str = st.selectbox("Seleccione el pago exacto a eliminar:", list(opciones_borrar.keys()))
+                    
+                    if st.form_submit_button("Eliminar Pago Seleccionado", use_container_width=True):
+                        idx_to_delete = opciones_borrar[sel_str]
+                        dato_borrado = df_pagos_full.loc[idx_to_delete]
+                        
+                        # Borramos usando el índice exacto
+                        df_act = df_pagos_full.drop(idx_to_delete).reset_index(drop=True)
+                        conn.update(worksheet="Pagos", data=df_act)
+                        cargar_pagos.clear()
+                        
+                        registrar_log("Anulación Pago", f"Eliminó pago de {dato_borrado['calle']} #{dato_borrado['numero']} del mes {dato_borrado['mes']}")
+                        st.toast("🗑️ Pago eliminado correctamente."); st.rerun()
+
     with t2:
         st.markdown("#### 🎁 Registrar Ingresos Extra")
         with st.form("form_extra"):
             con, mon = st.text_input("Concepto (Rifas, Donaciones)"), st.number_input("Monto ($)", step=1000)
-            if st.form_submit_button("💰 Guardar", use_container_width=True) and con and mon > 0:
+            if st.form_submit_button("💰 Guardar Dinero", use_container_width=True) and con and mon > 0:
                 nuevo_e = pd.DataFrame([{'concepto': con, 'monto': int(mon), 'fecha': datetime.now().strftime("%d/%m/%Y"), 'mes': mes_actual}])
                 conn.update(worksheet="Ingresos_Extra", data=pd.concat([df_extra_full, nuevo_e], ignore_index=True))
                 cargar_extra.clear()
@@ -400,7 +427,7 @@ elif st.session_state.rol == "Admin":
                     df_act = df_extra_full[~((df_extra_full['concepto'] == c_del) & (pd.to_numeric(df_extra_full['monto'], errors='coerce') == m_del) & (df_extra_full['mes'] == mes_actual))].reset_index(drop=True)
                     conn.update(worksheet="Ingresos_Extra", data=df_act.reindex(range(len(df_extra_full))))
                     cargar_extra.clear()
-                    registrar_log("Borró Ingreso Extra", f"Eliminó {c_del}")
+                    registrar_log("Borró Ingreso", f"Eliminó {c_del}")
                     st.rerun()
 
     with t3:
@@ -474,6 +501,8 @@ elif st.session_state.rol == "Admin":
         st.download_button("📥 Descargar Lista de Morosos (Excel)", excel_morosos, file_name=f"Morosos_{mes_actual}.xlsx", use_container_width=True)
 
         st.markdown("##### 👮‍♂️ 3. Liquidaciones de Sueldo (Guardias)")
+        st.write("Genera el recibo de pago individual con el cálculo exacto de bonos y descuentos para que el trabajador lo firme.")
+        
         if not df_guardias.empty:
             c_liq1, c_liq2 = st.columns([2, 1])
             with c_liq1:
@@ -497,4 +526,4 @@ elif st.session_state.rol == "Admin":
         buf_logs = io.BytesIO()
         with pd.ExcelWriter(buf_logs, engine='openpyxl') as wr:
             df_logs_full.to_excel(wr, index=False, sheet_name='Auditoria')
-        st.download_button("📥 Descargar Planilla de Auditoría (Excel)", buf_logs.getvalue(), file_name=f"Auditoria_Raimapu_{mes_actual}.xlsx", use_container_width=True)
+        st.download_button("📥 Descargar Planilla de Auditoría (Excel)", buf_logs.getvalue(), file_name=f"Auditoria_Raimapu.xlsx", use_container_width=True)
